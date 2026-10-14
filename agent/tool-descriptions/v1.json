@@ -1,0 +1,9 @@
+{
+  "find_customer_by_email": "Find a customer by their email address. Returns the customer's id, name, email and address. Use this first, with the email the customer gives you.",
+  "list_customer_orders": "List all orders for a customer, by customer id (like \"C001\"). Returns each order's id, status, date placed and total in rupees.",
+  "get_order": "Get one order by its order id (a number like 1042). Returns the customer id it belongs to, status, dates, shipping address, items, total, how much has already been refunded, and how much can still be refunded.",
+  "update_order_address": "Change the shipping address of an order. Only works while the order is processing.",
+  "cancel_order": "Cancel an order. Only works while the order is processing.",
+  "refund_order": "Refund part or all of a delivered order, as a whole number of rupees. Only works within 14 days of delivery and up to the amount not yet refunded.",
+  "transfer_to_human": "Hand the conversation to a human support specialist. Give a short summary of what the customer needs and why you are transferring."
+}

@@ -1,0 +1,11 @@
+{
+  "agent": {
+    "provider": "groq",
+    "model": "openai/gpt-oss-120b",
+    "temperature": 0,
+    "maxSteps": 12,
+    "stepTimeoutSeconds": 60
+  },
+  "promptVersion": "v1",
+  "toolDescriptionsVersion": "v1"
+}
