@@ -46,3 +46,9 @@ export function describeModelError(error: unknown, config: Config): string {
   }
   return `The model call failed: ${cause instanceof Error ? cause.message : String(cause)}`;
 }
+
+// A rate limit is worth waiting out; any other failure isn't.
+export function isRateLimited(error: unknown): boolean {
+  const cause = RetryError.isInstance(error) ? error.lastError : error;
+  return APICallError.isInstance(cause) && cause.statusCode === 429;
+}

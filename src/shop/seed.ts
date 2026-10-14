@@ -46,7 +46,17 @@ CREATE TABLE refunds (
   reason     TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+-- A transfer changes nothing else in the shop, so it leaves a row of its own:
+-- that's how the state grader tells a real transfer from a claimed one.
+CREATE TABLE transfers (
+  id         INTEGER PRIMARY KEY,
+  summary    TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
 `;
+
+// Every table the seed creates. A shop file missing one was seeded by older code.
+export const SHOP_TABLES = ["shop_meta", "customers", "products", "orders", "order_items", "refunds", "transfers"] as const;
 
 const PRODUCTS: ReadonlyArray<{ id: string; name: string; price: number }> = [
   { id: "P01", name: "Silicone Phone Case", price: 799 },

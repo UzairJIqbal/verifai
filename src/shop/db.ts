@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { PROJECT_ROOT } from "../config";
+import { SHOP_TABLES } from "./seed";
 
 // The seeded shop. The agent never touches this file; it only ever gets a copy.
 export const SEED_DB_PATH = join(PROJECT_ROOT, "data", "shop.db");
@@ -22,6 +23,14 @@ export function openFreshShop(seedPath: string = SEED_DB_PATH): Shop {
   const path = join(dir, "shop.db");
   copyFileSync(seedPath, path);
   const db = new DatabaseSync(path);
+  const tables = new Set(
+    z.array(z.object({ name: z.string() })).parse(db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all()).map((t) => t.name),
+  );
+  if (!SHOP_TABLES.every((table) => tables.has(table))) {
+    db.close();
+    rmSync(dir, { recursive: true, force: true });
+    throw new Error("The seeded shop is out of date (it was built by older code). Run `pnpm seed` again.");
+  }
   return {
     db,
     dispose: () => {

@@ -3,14 +3,15 @@ import { DatabaseSync } from "node:sqlite";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { EmptyState, PageHeading } from "@/components/shell/empty-state";
-import { Playground, type PlaygroundMeta } from "@/components/playground/playground";
+import { Playground, type PlaygroundMeta, type TaskPreset } from "@/components/playground/playground";
 import { loadConfig } from "@/src/config";
 import { agentProvider } from "@/src/agent/model";
 import { getShopToday, SEED_DB_PATH } from "@/src/shop/db";
 import { isLocalOnlyEnabled } from "@/src/local";
 import { listPickableCustomers, type PickableCustomer } from "@/src/playground/snapshot";
+import { loadTasks } from "@/src/tasks/load";
 
-export default function PlaygroundPage() {
+export default function PlaygroundPage({ searchParams }: PageProps<"/playground">) {
   if (!isLocalOnlyEnabled()) {
     return (
       <EmptyState title="The playground only runs on your own machine.">
@@ -21,7 +22,7 @@ export default function PlaygroundPage() {
   }
   return (
     <Suspense fallback={<p className="text-muted-foreground">Opening the playground…</p>}>
-      <LivePlayground />
+      <LivePlayground searchParams={searchParams} />
     </Suspense>
   );
 }
@@ -58,9 +59,11 @@ function load(): Loaded {
 
 // Read at request time, so the versions shown are the ones the next message
 // will use, and a fresh `pnpm seed` shows up on reload.
-async function LivePlayground() {
+async function LivePlayground({ searchParams }: { searchParams: PageProps<"/playground">["searchParams"] }) {
   await connection();
   const loaded = load();
+  const taskParam = (await searchParams).task;
+  const task = typeof taskParam === "string" ? loadPreset(taskParam) : undefined;
   if (!loaded.ok) {
     return (
       <>
@@ -72,5 +75,22 @@ async function LivePlayground() {
       </>
     );
   }
-  return <Playground meta={loaded.meta} customers={loaded.customers} />;
+  // Keyed by task, so opening another task starts clean instead of keeping
+  // the previous visit's conversation.
+  return <Playground key={taskParam?.toString() ?? ""} meta={loaded.meta} customers={loaded.customers} task={task} />;
+}
+
+const EMAIL = /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/;
+
+// A dev task's opening, ready to send. Only dev tasks: the loader never hands
+// out the holdout here, so asking for one by id finds nothing.
+function loadPreset(id: string): TaskPreset {
+  try {
+    const task = loadTasks().tasks.find((t) => t.id === id);
+    if (!task) return { ok: false, error: `There's no dev task called ${id}. Pick one from the Tasks page.` };
+    const email = [task.first_message, ...task.canned_replies].map((text) => EMAIL.exec(text)?.[0]).find((e) => e !== undefined);
+    return { ok: true, id: task.id, firstMessage: task.first_message, cannedReplies: task.canned_replies, email: email ?? "" };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
 }

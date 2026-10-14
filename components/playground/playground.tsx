@@ -25,6 +25,12 @@ export type PlaygroundMeta = {
   today: string;
 };
 
+// A task opened from the Tasks page: its first message waits in the composer,
+// and its canned replies are a click away.
+export type TaskPreset =
+  | { ok: true; id: string; firstMessage: string; cannedReplies: string[]; email: string }
+  | { ok: false; error: string };
+
 type Start = { state: "starting" } | { state: "ready"; id: string } | { state: "failed"; error: string };
 
 const UNREACHABLE = "Couldn't reach the dev server. Check that `pnpm dev` is still running, then try again.";
@@ -42,15 +48,16 @@ async function postJson(url: string, body: unknown, signal?: AbortSignal): Promi
 let nextId = 0;
 const newId = () => `item-${++nextId}`;
 
-export function Playground({ meta, customers }: { meta: PlaygroundMeta; customers: PickableCustomer[] }) {
+export function Playground({ meta, customers, task }: { meta: PlaygroundMeta; customers: PickableCustomer[]; task?: TaskPreset }) {
   const [start, setStart] = useState<Start>({ state: "starting" });
   const [items, setItems] = useState<TranscriptItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [waitingStep, setWaitingStep] = useState<number | null>(null);
   const [replySteps, setReplySteps] = useState(0);
   const [totalSteps, setTotalSteps] = useState(0);
-  const [email, setEmail] = useState("");
-  const [composer, setComposer] = useState("");
+  const preset = task?.ok ? task : undefined;
+  const [email, setEmail] = useState(preset?.email ?? "");
+  const [composer, setComposer] = useState(preset?.firstMessage ?? "");
   // An order carried over from the previous conversation, so New conversation
   // keeps showing it (back at its seeded state) until the agent picks another.
   const [carriedOrderId, setCarriedOrderId] = useState<number | null>(null);
@@ -325,6 +332,32 @@ export function Playground({ meta, customers }: { meta: PlaygroundMeta; customer
               </ol>
             )}
           </div>
+
+          {task && (
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-t px-3 py-2 text-[12px]">
+              {task.ok ? (
+                <>
+                  <span className="text-muted-foreground">
+                    Task <span className="font-mono text-foreground">{task.id}</span>
+                    {task.cannedReplies.length > 0 ? ", canned replies:" : ", no canned replies"}
+                  </span>
+                  {task.cannedReplies.map((reply, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setComposer(reply)}
+                      disabled={busy}
+                      className="rounded border px-2 py-0.5 text-left hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none disabled:opacity-60"
+                    >
+                      {reply}
+                    </button>
+                  ))}
+                </>
+              ) : (
+                <span className="text-fail">{task.error}</span>
+              )}
+            </div>
+          )}
 
           <form
             className="flex items-end gap-2 border-t p-2"

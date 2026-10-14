@@ -1,0 +1,171 @@
+// The only code that reads the tasks file. It validates every line, checks the
+// holdout against its frozen fingerprint, and hands out dev tasks unless the
+// caller says it's gating.
+import { createHash } from "node:crypto";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join, relative } from "node:path";
+import { z } from "zod";
+import { PROJECT_ROOT } from "../config";
+import { gradeState } from "../graders/state";
+import { runReference } from "../eval/conversation";
+import { taskFileHeaderSchema, taskSchema, type Category, type Task } from "./schema";
+
+export type TaskFiles = { tasks: string; lock: string; changelog: string };
+
+const EVALS_DIR = join(PROJECT_ROOT, "evals");
+export const TASK_FILES: TaskFiles = {
+  tasks: join(EVALS_DIR, "tasks.jsonl"),
+  lock: join(EVALS_DIR, "holdout.lock.json"),
+  changelog: join(EVALS_DIR, "CHANGELOG.md"),
+};
+
+const lockSchema = z.strictObject({
+  dataset_version: z.string(),
+  fingerprint: z.string().regex(/^[0-9a-f]{64}$/),
+  holdout_count: z.number().int().nonnegative(),
+  frozen_at: z.string(),
+});
+
+export type HoldoutCounts = Record<Category, number>;
+
+export type LoadedTasks = {
+  version: string;
+  tasks: Task[];
+  // How many holdout tasks each category has. Counts only: their content
+  // never leaves the loader unless the caller is gating.
+  holdoutCounts: HoldoutCounts;
+};
+
+const show = (path: string) => relative(PROJECT_ROOT, path) || path;
+
+function readTaskFile(path: string): { version: string; tasks: Task[] } {
+  // The file isn't part of any build trace: the tasks page prerenders from it.
+  if (!existsSync(/*turbopackIgnore: true*/ path)) {
+    throw new Error(`${show(path)} doesn't exist. It holds the tasks; restore it from git.`);
+  }
+  const lines = readFileSync(/*turbopackIgnore: true*/ path, "utf8").split("\n");
+  const where = (n: number) => `${show(path)} line ${n}`;
+
+  const parseLine = (n: number): unknown => {
+    try {
+      return JSON.parse(lines[n - 1]);
+    } catch (error) {
+      throw new Error(`${where(n)} isn't valid JSON (${error instanceof Error ? error.message : String(error)}). Fix that line and run again.`);
+    }
+  };
+
+  // Line 1 says which dataset version this is.
+  const header = taskFileHeaderSchema.safeParse(parseLine(1));
+  if (!header.success) {
+    throw new Error(`${where(1)} must be the header, like {"dataset_version":"v1"}: ${z.prettifyError(header.error)}`);
+  }
+
+  const tasks: Task[] = [];
+  const seen = new Map<string, number>();
+  for (let n = 2; n <= lines.length; n++) {
+    if (lines[n - 1].trim() === "") continue;
+    const parsed = taskSchema.safeParse(parseLine(n));
+    if (!parsed.success) {
+      throw new Error(`${where(n)} isn't a valid task:\n${z.prettifyError(parsed.error)}`);
+    }
+    const task = parsed.data;
+    const earlier = seen.get(task.id);
+    if (earlier !== undefined) throw new Error(`${where(n)} repeats the id ${task.id}, already used on line ${earlier}.`);
+    if (!task.id.startsWith(`${task.category}-`)) {
+      throw new Error(`${where(n)}: the id ${task.id} doesn't start with its category, ${task.category}.`);
+    }
+    seen.set(task.id, n);
+    tasks.push(task);
+  }
+  return { version: header.data.dataset_version, tasks };
+}
+
+// JSON with keys sorted at every level, so the fingerprint depends on what the
+// tasks say and not on how the file happens to be formatted.
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+export function holdoutFingerprint(tasks: Task[]): string {
+  const holdout = tasks.filter((t) => t.split === "holdout").sort((a, b) => (a.id < b.id ? -1 : 1));
+  return createHash("sha256").update(canonical(holdout)).digest("hex");
+}
+
+function countHoldout(tasks: Task[]): HoldoutCounts {
+  const counts: HoldoutCounts = { cancel: 0, refund: 0, address: 0, status: 0, transfer: 0 };
+  for (const task of tasks) if (task.split === "holdout") counts[task.category]++;
+  return counts;
+}
+
+const REFREEZE = "If the change was deliberate, re-freeze with `pnpm tasks:freeze --reason \"why\"`; otherwise undo it.";
+
+function checkLock(files: TaskFiles, tasks: Task[]): void {
+  if (!existsSync(/*turbopackIgnore: true*/ files.lock)) {
+    throw new Error(`The holdout has never been frozen (${show(files.lock)} is missing). Run \`pnpm tasks:freeze --reason "why"\`.`);
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(/*turbopackIgnore: true*/ files.lock, "utf8"));
+  } catch {
+    throw new Error(`${show(files.lock)} isn't valid JSON. Restore it from git.`);
+  }
+  const lock = lockSchema.safeParse(raw);
+  if (!lock.success) throw new Error(`${show(files.lock)} is malformed. Restore it from git.`);
+  if (holdoutFingerprint(tasks) !== lock.data.fingerprint) {
+    throw new Error(`The holdout tasks no longer match their frozen fingerprint: a holdout task was changed, added, removed or moved between splits. ${REFREEZE}`);
+  }
+}
+
+/**
+ * Dev tasks, unless `gating` is set, in which case only holdout tasks. Refuses
+ * (throws) on any bad line or a holdout that doesn't match its lock.
+ */
+export function loadTasks(options: { gating?: true; files?: TaskFiles } = {}): LoadedTasks {
+  const files = options.files ?? TASK_FILES;
+  const { version, tasks } = readTaskFile(files.tasks);
+  checkLock(files, tasks);
+  const split = options.gating ? "holdout" : "dev";
+  return { version, tasks: tasks.filter((t) => t.split === split), holdoutCounts: countHoldout(tasks) };
+}
+
+/**
+ * Re-freezes the holdout: the deliberate step after changing it. Every task's
+ * reference calls must produce exactly its expected changes first. Writes the
+ * lock and a changelog line saying why.
+ */
+export function freezeHoldout(reason: string, options: { files?: TaskFiles; seedPath?: string; now?: Date } = {}): {
+  version: string;
+  fingerprint: string;
+  holdoutCounts: HoldoutCounts;
+} {
+  if (reason.trim() === "") throw new Error("Say why the holdout is being frozen: --reason \"…\".");
+  const files = options.files ?? TASK_FILES;
+  const { version, tasks } = readTaskFile(files.tasks);
+
+  const broken: string[] = [];
+  for (const task of tasks) {
+    const { trajectory, errors } = runReference(task, options.seedPath);
+    const verdict = gradeState(task, trajectory);
+    if (errors.length > 0) broken.push(`${task.id}: reference call failed: ${errors.join("; ")}`);
+    else if (!verdict.pass) broken.push(`${task.id}: ${verdict.reason}`);
+  }
+  if (broken.length > 0) {
+    throw new Error(`Not frozen. These tasks' expected changes don't match their reference calls:\n  ${broken.join("\n  ")}`);
+  }
+
+  const fingerprint = holdoutFingerprint(tasks);
+  const holdoutCounts = countHoldout(tasks);
+  const total = Object.values(holdoutCounts).reduce((a, b) => a + b, 0);
+  const frozenAt = (options.now ?? new Date()).toISOString();
+  const lock: z.infer<typeof lockSchema> = { dataset_version: version, fingerprint, holdout_count: total, frozen_at: frozenAt };
+  writeFileSync(/*turbopackIgnore: true*/ files.lock, `${JSON.stringify(lock, null, 2)}\n`);
+  const line = `- ${frozenAt.slice(0, 10)} · ${version} · holdout frozen (${total} of ${tasks.length} tasks, fingerprint ${fingerprint.slice(0, 12)}). ${reason.trim()}\n`;
+  if (!existsSync(/*turbopackIgnore: true*/ files.changelog)) writeFileSync(/*turbopackIgnore: true*/ files.changelog, "# Tasks changelog\n\nEvery change to the holdout, and why.\n\n");
+  appendFileSync(/*turbopackIgnore: true*/ files.changelog, line);
+  return { version, fingerprint, holdoutCounts };
+}

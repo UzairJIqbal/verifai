@@ -122,6 +122,14 @@ describe("lookups", () => {
   });
 });
 
+describe("transfers", () => {
+  it("leave a row behind, so a real transfer shows in the database", () => {
+    expect(runTool(ctx, "transfer_to_human", { summary: "Wants a refund over Rs 10,000" }).ok).toBe(true);
+    const rows = shop.db.prepare("SELECT summary, created_at FROM transfers").all();
+    expect(rows).toEqual([{ summary: "Wants a refund over Rs 10,000", created_at: ctx.today }]);
+  });
+});
+
 describe("fresh shops", () => {
   it("never see each other's changes", () => {
     const id = orderWhere("o.status = 'processing'");

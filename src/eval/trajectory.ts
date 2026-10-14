@@ -1,0 +1,22 @@
+import type { AgentEvent } from "../agent/loop";
+import type { RowChange } from "../shop/diff";
+
+// Everything that happened in one try of a task: what the customer said, every
+// agent step, how it ended, and how the shop differs from the seed afterwards.
+export type TrajectoryEvent = { type: "customer"; text: string } | AgentEvent;
+
+export type ConversationEnd =
+  // The agent's last reply had no question in it.
+  | "answered"
+  // It asked a question but the task had no canned replies left.
+  | "out-of-replies"
+  // A turn hit the step limit without a reply.
+  | "step-limit";
+
+export type Trajectory = {
+  events: TrajectoryEvent[];
+  end: ConversationEnd;
+  changes: RowChange[];
+};
+
+export type Verdict = { grader: string; pass: boolean; reason: string };

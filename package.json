@@ -10,7 +10,9 @@
     "seed": "tsx scripts/seed.ts",
     "chat": "tsx scripts/chat.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "eval": "tsx scripts/eval.ts",
+    "tasks:freeze": "tsx scripts/freeze-tasks.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.94",

@@ -193,9 +193,14 @@ export const SHOP_TOOLS = {
     },
   ),
 
-  transfer_to_human: defineTool(z.strictObject({ summary: z.string().trim().min(1).max(500) }), () =>
-    ok({ transferred: true, message: "A support specialist will take over this conversation." }),
-  ),
+  transfer_to_human: defineTool(z.strictObject({ summary: z.string().trim().min(1).max(500) }), ({ db, today }, { summary }) => {
+    const result = db.prepare("INSERT INTO transfers (summary, created_at) VALUES (?, ?)").run(summary, today);
+    return ok({
+      transfer_id: Number(result.lastInsertRowid),
+      transferred: true,
+      message: "A support specialist will take over this conversation.",
+    });
+  }),
 } satisfies Record<ToolName, ShopTool>;
 
 export function runTool(ctx: ToolContext, name: string, input: unknown): ToolOutcome {
