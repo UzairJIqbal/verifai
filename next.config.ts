@@ -3,9 +3,6 @@ import { isLocalOnlyEnabled } from "./src/local";
 
 const nextConfig: NextConfig = {
   /* config options here */
-  experimental: {
-    agentFeedback: true,
-  },
   // On your machine the app opens on the playground; deployed, where the
   // playground is hidden, it opens on the runs.
   async redirects() {
