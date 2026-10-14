@@ -13,7 +13,9 @@ export type Shop = { db: DatabaseSync; dispose: () => void };
 // Every chat (and later every try) gets its own copy, so nothing one
 // conversation changes can leak into the next one's starting state.
 export function openFreshShop(seedPath: string = SEED_DB_PATH): Shop {
-  if (!existsSync(seedPath)) {
+  // The seed is never part of the deployed site (the playground is local only),
+  // so the build mustn't trace files from this path.
+  if (!existsSync(/*turbopackIgnore: true*/ seedPath)) {
     throw new Error("The shop hasn't been seeded yet. Run `pnpm seed` first.");
   }
   const dir = mkdtempSync(join(tmpdir(), "verifai-shop-"));
