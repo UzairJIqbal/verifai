@@ -72,7 +72,7 @@ export function runReference(task: Task, seedPath: string = SEED_DB_PATH): { tra
       const toolCallId = `ref-${i + 1}`;
       events.push({ type: "tool-call", step: i + 1, toolCallId, toolName: call.tool, input: call.input });
       const outcome = runTool(ctx, call.tool, call.input);
-      events.push({ type: "tool-result", step: i + 1, toolCallId, toolName: call.tool, outcome });
+      events.push({ type: "tool-result", step: i + 1, toolCallId, toolName: call.tool, outcome, startedAt: 0, latencyMs: 0 });
       if (!outcome.ok) errors.push(`${call.tool}: ${outcome.error}`);
     });
     return { trajectory: { events, end: "answered", changes: diffShops(before, dumpShop(shop.db)) }, errors };

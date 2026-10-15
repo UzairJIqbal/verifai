@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { z } from "zod";
+import { canonical } from "../canonical";
 import { PROJECT_ROOT } from "../config";
 import { gradeState } from "../graders/state";
 import { runReference } from "../eval/conversation";
@@ -78,17 +79,6 @@ function readTaskFile(path: string): { version: string; tasks: Task[] } {
     tasks.push(task);
   }
   return { version: header.data.dataset_version, tasks };
-}
-
-// JSON with keys sorted at every level, so the fingerprint depends on what the
-// tasks say and not on how the file happens to be formatted.
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value !== null && typeof value === "object") {
-    const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
 }
 
 export function holdoutFingerprint(tasks: Task[]): string {

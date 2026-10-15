@@ -5,7 +5,7 @@ import { connection } from "next/server";
 import { EmptyState, PageHeading } from "@/components/shell/empty-state";
 import { Playground, type PlaygroundMeta, type TaskPreset } from "@/components/playground/playground";
 import { loadConfig } from "@/src/config";
-import { agentProvider } from "@/src/agent/model";
+import { firstInPool, providerLabel } from "@/src/agent/model";
 import { getShopToday, SEED_DB_PATH } from "@/src/shop/db";
 import { isLocalOnlyEnabled } from "@/src/local";
 import { listPickableCustomers, type PickableCustomer } from "@/src/playground/snapshot";
@@ -43,7 +43,7 @@ function load(): Loaded {
     return {
       ok: true,
       meta: {
-        providerLabel: agentProvider(config).label,
+        providerLabel: providerLabel(firstInPool(config).provider),
         model: config.agent.model,
         promptVersion: config.promptVersion,
         toolDescriptionsVersion: config.toolDescriptionsVersion,

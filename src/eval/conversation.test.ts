@@ -34,7 +34,7 @@ const reply = (text: string) => ({
 
 function setupWith(model: MockLanguageModelV4): AgentSetup {
   const config = loadConfig();
-  return { model, temperature: 0, maxSteps: 3, stepTimeoutMs: 1000, version: loadAgentVersion(config, "2026-03-15") };
+  return { model, provider: "test", temperature: 0, maxSteps: 3, stepTimeoutMs: 1000, reasoningEffort: "low", version: loadAgentVersion(config, "2026-03-15") };
 }
 
 const task = taskSchema.parse({

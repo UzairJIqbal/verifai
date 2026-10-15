@@ -1,0 +1,41 @@
+{
+  "runId": "20261015-194943-2338",
+  "createdAt": "2026-10-15T19:49:43.930Z",
+  "finishedAt": "2026-10-15T19:49:44.691Z",
+  "split": "dev",
+  "smoke": true,
+  "datasetVersion": "v1",
+  "taskCount": 5,
+  "triesPerTask": 4,
+  "useCache": true,
+  "agent": {
+    "pool": [
+      "groq",
+      "cloudflare"
+    ],
+    "model": "openai/gpt-oss-120b",
+    "temperature": 0,
+    "maxSteps": 12,
+    "reasoningEffort": "low",
+    "promptVersion": "v1",
+    "toolDescriptionsVersion": "v1"
+  },
+  "totals": {
+    "trials": 20,
+    "passed": 15,
+    "failed": 5,
+    "errored": 0,
+    "calls": 78,
+    "cachedCalls": 78,
+    "callsByProvider": {
+      "cloudflare": 70,
+      "groq": 8
+    },
+    "usage": {
+      "inputTokens": 80617,
+      "cachedInputTokens": 0,
+      "outputTokens": 3549
+    },
+    "costUsd": 0.028718500000000004
+  }
+}

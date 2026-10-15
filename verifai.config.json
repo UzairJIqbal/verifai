@@ -1,10 +1,59 @@
 {
   "agent": {
-    "provider": "groq",
     "model": "openai/gpt-oss-120b",
+    "pool": [
+      {
+        "provider": "groq",
+        "modelId": "openai/gpt-oss-120b",
+        "freeTierLimits": {
+          "checked": "2026-10-15 on https://console.groq.com/docs/rate-limits (cached input tokens don't count)",
+          "requestsPerMinute": 30,
+          "tokensPerMinute": 8000,
+          "requestsPerDay": 1000,
+          "daily": {
+            "unit": "tokens",
+            "allowance": 200000,
+            "unitsPerMillionTokens": { "input": 1000000, "cachedInput": 0, "output": 1000000 }
+          }
+        },
+        "pricePerMillionTokensUsd": {
+          "checked": "2026-10-15 on https://groq.com/pricing",
+          "input": 0.15,
+          "cachedInput": 0.075,
+          "output": 0.6
+        }
+      },
+      {
+        "provider": "cloudflare",
+        "modelId": "@cf/openai/gpt-oss-120b",
+        "freeTierLimits": {
+          "checked": "2026-10-16 on https://developers.cloudflare.com/workers-ai/platform/pricing/ and /platform/limits/ (10,000 neurons a day, reset 00:00 UTC; no cached-input discount)",
+          "requestsPerMinute": 300,
+          "tokensPerMinute": null,
+          "requestsPerDay": null,
+          "daily": {
+            "unit": "neurons",
+            "allowance": 10000,
+            "unitsPerMillionTokens": { "input": 31818, "cachedInput": 31818, "output": 68182 }
+          }
+        },
+        "pricePerMillionTokensUsd": {
+          "checked": "2026-10-16 on https://developers.cloudflare.com/workers-ai/platform/pricing/ ($0.011 per 1,000 neurons)",
+          "input": 0.35,
+          "cachedInput": 0.35,
+          "output": 0.75
+        }
+      }
+    ],
     "temperature": 0,
     "maxSteps": 12,
-    "stepTimeoutSeconds": 60
+    "stepTimeoutSeconds": 60,
+    "reasoningEffort": "low"
+  },
+  "runner": {
+    "triesPerTask": 4,
+    "concurrency": 2,
+    "smokeTasks": ["cancel-01", "refund-01", "address-02", "status-02", "transfer-01"]
   },
   "promptVersion": "v1",
   "toolDescriptionsVersion": "v1"

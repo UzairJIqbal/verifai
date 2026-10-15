@@ -3,15 +3,45 @@ import { cn } from "@/lib/utils";
 import type { ToolOutcome } from "@/src/playground/protocol";
 
 export type TranscriptItem =
-  | { kind: "user"; id: string; text: string }
+  // `who` defaults to "you"; a recorded try calls it "customer".
+  | { kind: "user"; id: string; text: string; who?: string }
   | { kind: "agent"; id: string; step: number; text: string }
-  | { kind: "tool"; id: string; step: number; toolName: string; input: unknown; outcome?: ToolOutcome }
-  | { kind: "notice"; id: string; tone: "error" | "info"; text: string };
+  | { kind: "tool"; id: string; step: number; toolName: string; input: unknown; outcome?: ToolOutcome; latencyMs?: number }
+  | { kind: "notice"; id: string; tone: "error" | "info"; text: string }
+  // One model call of a recorded try: what it cost and how long it took.
+  | {
+      kind: "call";
+      id: string;
+      step: number;
+      // The pool provider that answered.
+      provider: string;
+      inputTokens: number;
+      cachedInputTokens: number;
+      outputTokens: number;
+      latencyMs: number;
+      replayed: boolean;
+    };
 
-// One row of the log: who, at which step, and what.
-function Row({ who, step, children, className }: { who: string; step?: number; children: ReactNode; className?: string }) {
+const n = (value: number) => value.toLocaleString("en-US");
+export const formatMs = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
+
+// One row of the log: who, at which step, and what. A live chat slides each
+// row in as it arrives; a recorded try is still, since nothing new arrives.
+function Row({
+  who,
+  step,
+  children,
+  className,
+  still = false,
+}: {
+  who: string;
+  step?: number;
+  children: ReactNode;
+  className?: string;
+  still?: boolean;
+}) {
   return (
-    <li className={cn("step-in grid grid-cols-[3.25rem_minmax(0,1fr)] gap-x-3 py-2", className)}>
+    <li className={cn("grid grid-cols-[3.25rem_minmax(0,1fr)] gap-x-3 py-2", !still && "step-in", className)}>
       <div className="pt-px text-right text-[11px] leading-5 text-muted-foreground">
         <div>{who}</div>
         {step !== undefined && <div className="font-mono">step {step}</div>}
@@ -47,6 +77,7 @@ function ToolCard({ item }: { item: Extract<TranscriptItem, { kind: "tool" }> })
     <div className="rounded-md border bg-card">
       <div className="flex items-center gap-2 border-b px-2.5 py-1">
         <code className="font-medium">{item.toolName}</code>
+        {item.latencyMs !== undefined && <span className="font-mono text-[11px] text-muted-foreground">{formatMs(item.latencyMs)}</span>}
         <span className="ml-auto text-[11px]">
           {outcome === undefined ? (
             <span className="text-muted-foreground">running…</span>
@@ -75,29 +106,39 @@ function ToolCard({ item }: { item: Extract<TranscriptItem, { kind: "tool" }> })
   );
 }
 
-export function TranscriptRow({ item }: { item: TranscriptItem }) {
+export function TranscriptRow({ item, still = false }: { item: TranscriptItem; still?: boolean }) {
   switch (item.kind) {
     case "user":
       return (
-        <Row who="you">
+        <Row who={item.who ?? "you"} still={still}>
           <p className="whitespace-pre-wrap wrap-anywhere">{item.text}</p>
         </Row>
       );
     case "agent":
       return (
-        <Row who="agent" step={item.step}>
+        <Row who="agent" step={item.step} still={still}>
           <p className="whitespace-pre-wrap wrap-anywhere">{item.text}</p>
         </Row>
       );
     case "tool":
       return (
-        <Row who="tool" step={item.step}>
+        <Row who="tool" step={item.step} still={still}>
           <ToolCard item={item} />
+        </Row>
+      );
+    case "call":
+      return (
+        <Row who="model" step={item.step} still={still} className="py-1">
+          <p className="font-mono text-[11px] leading-5 text-muted-foreground">
+            {item.provider} · {n(item.inputTokens)} in{item.cachedInputTokens > 0 && ` (${n(item.cachedInputTokens)} cached)`} · {n(item.outputTokens)} out ·{" "}
+            {formatMs(item.latencyMs)}
+            {item.replayed && " · replayed from the cache; tokens and time are the original call's"}
+          </p>
         </Row>
       );
     case "notice":
       return (
-        <Row who="">
+        <Row who="" still={still}>
           <p className={cn("whitespace-pre-wrap wrap-anywhere", item.tone === "error" ? "text-fail" : "text-muted-foreground")}>
             {item.text}
           </p>

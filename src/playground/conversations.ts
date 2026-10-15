@@ -3,9 +3,9 @@
 // is saved: a restart of the server ends every conversation.
 import { randomUUID } from "node:crypto";
 import type { ModelMessage } from "ai";
-import { requireApiKey, type Config } from "../config";
+import type { Config } from "../config";
 import { getShopToday, openFreshShop, type Shop } from "../shop/db";
-import { agentProvider, createAgentModel } from "../agent/model";
+import { connectAgent, firstInPool } from "../agent/model";
 import { loadAgentVersion } from "../agent/versions";
 import type { AgentSetup } from "../agent/loop";
 import type { ToolContext } from "../agent/tools";
@@ -62,12 +62,15 @@ export function finishTurn(id: string, conversation: Conversation): void {
 // Built for every turn from a freshly read config, so an edit to the config
 // or the key takes effect on the next message without restarting the server.
 export function buildAgentSetup(config: Config, today: string): AgentSetup {
-  const apiKey = requireApiKey(agentProvider(config));
+  // The playground talks to the first provider in the pool and doesn't switch.
+  const agent = connectAgent(firstInPool(config));
   return {
-    model: createAgentModel(config, apiKey),
+    model: agent.model,
+    provider: agent.provider,
     temperature: config.agent.temperature,
     maxSteps: config.agent.maxSteps,
     stepTimeoutMs: config.agent.stepTimeoutSeconds * 1000,
+    reasoningEffort: config.agent.reasoningEffort,
     version: loadAgentVersion(config, today),
   };
 }

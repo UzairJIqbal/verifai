@@ -115,8 +115,9 @@ Each of these is something a model will propose, because each of them sounds lik
 Your list, with the reasoning for each and four small changes.
 
 - **TypeScript, strict.** One language for the agent, the graders, the stats and the dashboard.
-- **Groq and Gemini, both on the free tier.** Groq runs the agent and the simulated customer; Gemini runs the judge and the claim checker. Each one's provider and model is set in the config file, never in the code. *Change (2026-10-14):* Gemini gave 503 "busy" errors when it ran the agent, and two providers give two separate free daily limits. A judge from a different company than the agent is also more independent: it's less likely to go easy on its own style, and the judge validation measures how much is left.
-- **Vercel AI SDK** for calling Groq and Gemini, one provider package each, and describing tools with Zod schemas. Only for the model call. The loop is yours (see "Out of scope").
+- **Two free providers: Groq for the agent, Gemini for the judge.** *Change (decided 2026-10-14):* the agent and the simulated customer run on a fast Groq model with tool calling; the judge and the claim checker run on a Gemini model. Each model and its provider is set in one config file, never in the code. Two providers means two separate free daily limits instead of one shared one. And a judge from a different company is less likely to go easy on the agent's style; the judge validation measures how much bias is left. Either side can be moved to the other provider by changing the config.
+- **A provider pool for the agent** (added 2026-10-14, Phase 4). Groq's free tier allows 200K counted tokens a day, and its prompt cache only hits about half the time, so a full run would take about 3 days. The same gpt-oss-120b model is also free on Cloudflare Workers AI (a daily allowance of "neurons"), so the runner spreads calls across both, moving to the next provider when one is at its limit. Only the same model is ever pooled; mixing models would grade a blend, not one agent.
+- **Vercel AI SDK** for calling Groq and Gemini (one provider package each) and describing tools with Zod schemas. Only for the model call. The loop is yours (see "Out of scope").
 - **SQLite through Node's built-in `node:sqlite`.** *Change:* the built-in module, not a package like `better-sqlite3`, so nothing native has to compile on your Mac. It needs Node 22.13 or newer. If it turns out to be missing something you need, say so and `better-sqlite3` is the fallback. Two database files: `shop.db`, the agent's world, copied fresh for every try; and the eval store, holding runs, trials, steps, grades and the response cache.
 - **p-limit** to run a few tries at once without going over the rate limit.
 - **Langfuse, not Phoenix.** *Change:* pick one, and Langfuse Cloud's free plan needs nothing installed, while Phoenix wants Python or Docker running on your machine. It's for clicking through traces. Your own SQLite store stays the source of truth, because the stats need to query it and a free plan can change.
@@ -129,14 +130,14 @@ Your list, with the reasoning for each and four small changes.
 - **Gemini's embedding model** for spotting duplicate regression tasks and for exemplar memory. Uses the Gemini key.
 - **Vercel Hobby** for the read-only dashboard in Phase Final. It's a portfolio project, so Hobby's non-commercial rule is fine.
 
-**The free tier is the biggest constraint in this project.** A full run is roughly: 50 tasks × 4 tries × about 5 model calls each = about 1,000 agent calls on Groq, plus judge and claim-checker calls on Gemini. Both free tiers have a per-minute limit and a per-day limit for each model, both get busy at times, and Flowlens hit Gemini's daily one. Check the current numbers on both providers' limits pages (Groq's console and Google AI Studio) before Phase 4, because they change. The design handles it in four ways:
+**The free tier is the biggest constraint in this project.** A full run is roughly: 50 tasks × 4 tries × about 5 model calls each = about 1,000 agent calls on Groq, plus judge and claim-checker calls on Gemini. Both free tiers have a per-minute limit and a per-day limit for each model (Flowlens hit Gemini's daily one), and both get busy at times. Check the current numbers on Groq's and Google AI Studio's rate-limit pages before Phase 4, because they change. The design handles it in four ways:
 
 1. **The response cache.** Rerunning the graders on an existing run costs nothing. Only a changed prompt or tool description costs new calls.
-2. **Resumable runs.** When the daily limit hits, the run stops cleanly, and tomorrow's command carries on from the next try. A 429 (rate limit) or a 503 (busy) waits and retries a few times, saying so.
-3. **A daily budget counter** per provider, printed before a run starts: "this run needs about 1,000 Groq calls and 100 Gemini calls; 640 and 400 left today". Nothing starts that can't finish without saying so.
+2. **Resumable runs.** When the daily limit hits, the run stops cleanly, and tomorrow's command carries on from the next try. A 429 (too many requests) or a 503 (provider busy) waits and retries a few times, saying so.
+3. **A daily budget counter per provider** printed before a run starts: "this run needs about 1,000 Groq calls and 100 Gemini calls; 640 and 400 left today". Nothing starts that can't finish without saying so.
 4. **Development runs on the dev split only.** The holdout runs only when gating a fix.
 
-If waiting days per iteration becomes the bottleneck, the escape hatch is a paid key on either provider with a hard spending cap of a few dollars. That's your call to make, not the code's. Nothing in the design depends on it.
+If waiting days per iteration becomes the bottleneck, the escape hatch is a paid key on either provider, with billing on and a hard spending cap of a few dollars. That's your call to make, not the code's. Nothing in the design depends on it.
 
 ## How it works
 

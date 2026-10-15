@@ -34,7 +34,7 @@ const reply = (text: string) => ({
 
 function setupWith(model: MockLanguageModelV4, today: string): AgentSetup {
   const config = loadConfig();
-  return { model, temperature: 0, maxSteps: config.agent.maxSteps, stepTimeoutMs: 1000, version: loadAgentVersion(config, today) };
+  return { model, provider: "test", temperature: 0, maxSteps: config.agent.maxSteps, stepTimeoutMs: 1000, reasoningEffort: "low", version: loadAgentVersion(config, today) };
 }
 
 describe("agent loop", () => {
@@ -55,9 +55,9 @@ describe("agent loop", () => {
     shop.dispose();
 
     expect(result).toEqual({ stopReason: "replied", steps: 3, reply: "Your order is processing." });
-    expect(events.map((e) => e.type)).toEqual(["tool-call", "tool-result", "tool-call", "tool-result", "text"]);
+    expect(events.map((e) => e.type)).toEqual(["model", "tool-call", "tool-result", "model", "tool-call", "tool-result", "model", "text"]);
     // The bad input became an error the model reads on its next step.
-    const first = events[1];
+    const first = events[2];
     expect(first.type === "tool-result" && !first.outcome.ok && first.outcome.error).toMatch(/Invalid input/);
     expect(JSON.stringify(model.doGenerateCalls[1].prompt)).toContain("Invalid input");
     // Exactly one tool message per tool step, all of them ours.

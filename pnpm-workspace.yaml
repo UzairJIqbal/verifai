@@ -2,3 +2,8 @@ allowBuilds:
   sharp: false
   unrs-resolver: false
   esbuild: false
+  protobufjs: false
+minimumReleaseAgeExclude:
+  - '@ai-sdk/openai-compatible@3.0.70'
+  - '@ai-sdk/provider-utils@5.0.61'
+  - '@ai-sdk/provider@4.0.28'

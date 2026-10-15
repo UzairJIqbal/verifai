@@ -14,11 +14,16 @@ const PLACES = [
 ] as const;
 
 export function NavLinks({ showLocalOnly }: { showLocalOnly: boolean }) {
-  const pathname = usePathname();
+  return <NavList showLocalOnly={showLocalOnly} pathname={usePathname()} />;
+}
+
+// The same links with nothing marked: what the shell shows while a page with
+// a run id in its address, unknown until it's asked for, works out where it is.
+export function NavList({ showLocalOnly, pathname }: { showLocalOnly: boolean; pathname: string | null }) {
   return (
     <nav aria-label="Main" className="flex items-stretch gap-4 self-stretch">
       {PLACES.filter((place) => showLocalOnly || !place.localOnly).map(({ href, label }) => {
-        const active = pathname === href || pathname.startsWith(`${href}/`);
+        const active = pathname !== null && (pathname === href || pathname.startsWith(`${href}/`));
         return (
           <Link
             key={href}

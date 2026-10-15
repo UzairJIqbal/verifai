@@ -3,10 +3,10 @@
 import { createInterface } from "node:readline";
 import { styleText } from "node:util";
 import type { ModelMessage } from "ai";
-import { loadConfig, requireApiKey, type Config } from "../src/config";
+import { loadConfig, type Config } from "../src/config";
 import { getShopToday, openFreshShop, type Shop } from "../src/shop/db";
 import { loadAgentVersion } from "../src/agent/versions";
-import { agentProvider, createAgentModel, describeModelError } from "../src/agent/model";
+import { connectAgent, describeModelError, firstInPool } from "../src/agent/model";
 import { runAgentTurn, type AgentEvent, type AgentSetup } from "../src/agent/loop";
 import type { ToolContext } from "../src/agent/tools";
 
@@ -29,6 +29,8 @@ function clearWaiting(): void {
 }
 
 function printEvent(event: AgentEvent): void {
+  // Tokens and timing are for the eval record, not the chat.
+  if (event.type === "model") return;
   clearWaiting();
   const step = dim(`  ${String(event.step).padStart(2)} `);
   if (event.type === "text") {
@@ -50,20 +52,22 @@ function fatal(message: string): never {
 function start(): { config: Config; shop: Shop; setup: AgentSetup; ctx: ToolContext } {
   try {
     const config = loadConfig();
-    const provider = agentProvider(config);
-    providerLabel = provider.label;
-    const apiKey = requireApiKey(provider);
+    // The terminal chat talks to the first provider in the pool and doesn't switch.
+    const agent = connectAgent(firstInPool(config));
+    providerLabel = agent.label;
     const shop = openFreshShop();
     const today = getShopToday(shop.db);
     const setup: AgentSetup = {
-      model: createAgentModel(config, apiKey),
+      model: agent.model,
+      provider: agent.provider,
       temperature: config.agent.temperature,
       maxSteps: config.agent.maxSteps,
       stepTimeoutMs: config.agent.stepTimeoutSeconds * 1000,
+      reasoningEffort: config.agent.reasoningEffort,
       version: loadAgentVersion(config, today),
     };
     console.log(styleText("bold", "VerifAI chat · Volt & Case support"));
-    console.log(dim(`  agent ${setup.version.label} · ${provider.label} ${config.agent.model} · temperature ${config.agent.temperature}`));
+    console.log(dim(`  agent ${setup.version.label} · ${agent.label} ${config.agent.model} · temperature ${config.agent.temperature}`));
     console.log(dim(`  fresh copy of the seeded shop · shop today ${today} · up to ${setup.maxSteps} steps per reply`));
     console.log(dim("  Type a message. /exit or Ctrl-D to leave.\n"));
     return { config, shop, setup, ctx: { db: shop.db, today } };
@@ -108,7 +112,7 @@ async function main(): Promise<void> {
       clearWaiting();
       // Drop the half-finished turn so the conversation stays consistent.
       messages.length = before;
-      console.log(styleText("red", `  ✗ ${describeModelError(error, config)}`));
+      console.log(styleText("red", `  ✗ ${describeModelError(error, firstInPool(config), config.agent.stepTimeoutSeconds)}`));
       console.log(dim("  Your message wasn't answered. Send it again to retry."));
     }
     console.log();

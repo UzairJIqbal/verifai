@@ -1,5 +1,5 @@
 import { loadConfig, type Config } from "@/src/config";
-import { describeModelError } from "@/src/agent/model";
+import { describeModelError, firstInPool } from "@/src/agent/model";
 import { runAgentTurn, type AgentSetup } from "@/src/agent/loop";
 import { buildAgentSetup, finishTurn, getConversation } from "@/src/playground/conversations";
 import { CONVERSATION_GONE, errorMessage, errorResponse, readBody, refuseIfDeployed } from "@/src/playground/http";
@@ -37,15 +37,26 @@ export async function POST(request: Request): Promise<Response> {
         }
         conversation.messages.push({ role: "user", content: text });
         try {
-          const result = await runAgentTurn(setup, conversation.ctx, conversation.messages, send, (step) =>
-            send({ type: "waiting", step }),
+          const result = await runAgentTurn(
+            setup,
+            conversation.ctx,
+            conversation.messages,
+            // The playground shows steps, not token counts or timings.
+            (event) => {
+              if (event.type === "text" || event.type === "tool-call") send(event);
+              else if (event.type === "tool-result") {
+                const { step, toolCallId, toolName, outcome } = event;
+                send({ type: "tool-result", step, toolCallId, toolName, outcome });
+              }
+            },
+            (step) => send({ type: "waiting", step }),
           );
           send({ type: "done", stopReason: result.stopReason, steps: result.steps, reply: result.reply });
         } catch (error) {
           // Drop the half-finished turn so the conversation stays consistent,
           // the same as the terminal chat.
           conversation.messages.length = before;
-          send({ type: "error", message: describeModelError(error, config) });
+          send({ type: "error", message: describeModelError(error, firstInPool(config), config.agent.stepTimeoutSeconds) });
         }
       } finally {
         finishTurn(conversationId, conversation);

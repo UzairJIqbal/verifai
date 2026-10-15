@@ -1,7 +1,8 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Geist, Geist_Mono } from "next/font/google";
-import { NavLinks } from "@/components/shell/nav-links";
+import { NavLinks, NavList } from "@/components/shell/nav-links";
 import { ThemeControl } from "@/components/shell/theme-control";
 import { THEME_SCRIPT } from "@/components/shell/theme";
 import { isLocalOnlyEnabled } from "@/src/local";
@@ -27,7 +28,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     // The theme script changes the class and data-theme before hydration.
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} antialiased`} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        {/* Some browser extensions rewrite the first script in <head>; React
+            should leave this one alone rather than warn. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} suppressHydrationWarning />
       </head>
       <body className="flex min-h-dvh flex-col">
         <header className="border-b">
@@ -37,7 +40,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
               VerifAI
             </Link>
             <div className="order-last flex h-9 w-full sm:order-none sm:h-full sm:w-auto">
-              <NavLinks showLocalOnly={isLocalOnlyEnabled()} />
+              <Suspense fallback={<NavList showLocalOnly={isLocalOnlyEnabled()} pathname={null} />}>
+                <NavLinks showLocalOnly={isLocalOnlyEnabled()} />
+              </Suspense>
             </div>
             <div className="ml-auto">
               <ThemeControl />

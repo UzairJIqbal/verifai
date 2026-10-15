@@ -42,3 +42,4 @@ next-env.d.ts
 
 # the seeded shop is rebuilt from the seed with `pnpm seed`
 /data/*.db
+/data/*.db-*
