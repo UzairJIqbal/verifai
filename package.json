@@ -14,6 +14,7 @@
     "eval": "tsx scripts/eval.ts",
     "noise": "tsx scripts/noise.ts",
     "compare": "tsx scripts/compare.ts",
+    "regrade": "tsx scripts/regrade.ts",
     "tasks:freeze": "tsx scripts/freeze-tasks.ts"
   },
   "dependencies": {

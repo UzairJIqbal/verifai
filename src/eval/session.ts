@@ -9,7 +9,9 @@ import { getShopToday, openFreshShop } from "../shop/db";
 import { loadAgentVersion, type AgentVersion } from "../agent/versions";
 import { connectAgent, describeModelError, type AgentConnection } from "../agent/model";
 import { loadTasks, type LoadedTasks } from "../tasks/load";
-import type { Difficulty, Task } from "../tasks/schema";
+import type { Task } from "../tasks/schema";
+import { readShopFacts } from "../graders/shop-facts";
+import type { ShopFacts } from "../graders/steps";
 import { cacheKey } from "./cache";
 import { estimateBudget, type Budget } from "./budget";
 import { Pacer, estimateTokens, type Clock } from "./pacer";
@@ -19,7 +21,7 @@ import { makeRedactor, type Redact } from "./redact";
 import { runTrials, type PoolProvider, type Progress } from "./runner";
 import { EVAL_STORE_PATH, EvalStore, tryKey, type RunConfig, type StoredRun } from "./store";
 import { langfuseSecrets, startTracing, type Tracing } from "./tracing";
-import { statsTable, successLine, writeResults } from "../results/write";
+import { graderTables, statsTable, successLine, writeResults } from "../results/write";
 import type { Report } from "../results/schema";
 
 export const dim = (text: string) => styleText("dim", text);
@@ -95,7 +97,9 @@ export type Session = {
   config: Config;
   loaded: LoadedTasks;
   tasks: Task[];
-  difficulties: Map<string, Difficulty>;
+  // Every dev task by id, for the results files.
+  tasksById: Map<string, Task>;
+  shop: ShopFacts;
   version: AgentVersion;
   agents: AgentConnection[];
   labels: Map<string, string>;
@@ -117,6 +121,7 @@ export async function openSession(args: { useCache: boolean; smoke: boolean }): 
   let tasks: Task[];
   let version: AgentVersion;
   let agents: AgentConnection[];
+  let shopFacts: ShopFacts;
   // One per provider, each with its own per-minute budget. Filled when a run
   // starts, once the store can say what each provider still counts from the
   // last minute.
@@ -127,6 +132,7 @@ export async function openSession(args: { useCache: boolean; smoke: boolean }): 
     tasks = smoke ? pickSmokeTasks(loaded.tasks, config.runner.smokeTasks) : loaded.tasks;
     const shop = openFreshShop();
     const today = getShopToday(shop.db);
+    shopFacts = readShopFacts(shop.db, today);
     shop.dispose();
     version = loadAgentVersion(config, today);
     agents = config.agent.pool.map((member) => connectAgent(member, (remaining) => pacers.get(member.provider)?.observeRemaining(remaining)));
@@ -143,7 +149,8 @@ export async function openSession(args: { useCache: boolean; smoke: boolean }): 
     config,
     loaded,
     tasks,
-    difficulties: new Map(loaded.tasks.map((t) => [t.id, t.difficulty])),
+    tasksById: new Map(loaded.tasks.map((t) => [t.id, t])),
+    shop: shopFacts,
     version,
     agents,
     labels: new Map(agents.map((a) => [a.provider, a.label])),
@@ -201,22 +208,40 @@ export function printProviders(s: Session, budget: Budget): void {
 
 // The run report in the terminal: the success rate with its interval, then
 // pass^k and pass@k for the whole run, each category and each difficulty.
-export function printReport(report: Report): void {
-  if (!report.stats) return;
-  console.log(`\n${styleText("bold", successLine(report.stats))}`);
-  console.log(dim("  Brackets are 95% intervals from resampling tasks. pass^k: all k tries of a task pass. pass@k: at least one does."));
-  const { header, rows } = statsTable(report.stats);
+function printTable(header: string[], rows: string[][], gapsBefore: number[] = []): void {
   const table = [header, ...rows];
   const widths = header.map((_, i) => Math.max(...table.map((r) => r[i].length)));
   const line = (r: string[]) => `  ${r.map((cell, i) => (i === 0 ? cell.padEnd(widths[i]) : cell.padStart(widths[i]))).join("  ")}`;
   console.log(dim(line(header)));
   rows.forEach((r, i) => {
-    // A gap between the whole run, the categories and the difficulties.
-    if (i === 1 || i === 1 + Object.keys(report.stats?.byCategory ?? {}).length) console.log("");
+    if (gapsBefore.includes(i)) console.log("");
     console.log(line(r));
   });
+}
+
+export function printReport(report: Report): void {
+  if (!report.stats) return;
+  console.log(`\n${styleText("bold", successLine(report.stats))}`);
+  console.log(dim("  Brackets are 95% intervals from resampling tasks. pass^k: all k tries of a task pass. pass@k: at least one does."));
+  const { header, rows } = statsTable(report.stats);
+  // A gap between the whole run, the categories and the difficulties.
+  printTable(header, rows, [1, 1 + Object.keys(report.stats.byCategory).length]);
+  printGraderReport(report);
   if (report.totals.errored > 0) {
     console.log(styleText(["yellow", "bold"], `⚠ ${report.totals.errored} tries errored. They count as not passed, so these rates understate the agent.`));
+  }
+}
+
+// How the tries got to their results. Only state and reply decide a pass; these
+// are reported beside it.
+export function printGraderReport(report: Report): void {
+  if (!report.graders) return;
+  const g = report.graders;
+  console.log(`\n${styleText("bold", "Trajectory graders")} ${dim(`· ${g.tasks} tasks, ${g.tries} tries${g.errored > 0 ? `, ${g.errored} errored tries left out` : ""} · only state and reply decide a pass`)}`);
+  console.log(dim("  \"couldn't grade\" is counted apart and never as a pass. Precision: of the tries that called a tool, how many needed it. Recall: of the tries that needed it, how many called it."));
+  for (const t of graderTables(g)) {
+    console.log(`\n  ${styleText("bold", t.title)}`);
+    printTable(t.header, t.rows);
   }
 }
 
@@ -312,6 +337,7 @@ export async function executeRun(s: Session, args: { title: string; command: str
         version: s.version,
       },
       tasks: s.tasks,
+      shop: s.shop,
       concurrency: config.runner.concurrency,
       clock,
       describeError: (error) => (error instanceof Error ? error.message : String(error)),
@@ -343,7 +369,7 @@ export async function executeRun(s: Session, args: { title: string; command: str
 
   const finishedAt = new Date().toISOString();
   const finishedRun: StoredRun = { ...run, status: "finished", finishedAt };
-  const written = writeResults(finishedRun, trials, s.difficulties, finishedAt, s.redact);
+  const written = writeResults(finishedRun, trials, s.tasksById, finishedAt, s.redact);
   // Only once its files exist: if writing them fails, the run stays
   // unfinished and the next `pnpm eval` writes them again.
   store.finishRun(run.id, finishedAt);

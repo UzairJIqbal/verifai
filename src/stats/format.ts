@@ -9,6 +9,8 @@ export const points = (x: number, signed = true) => (Number.isNaN(x) ? "–" : `
 export const interval = (e: Estimate) => `${(e.lo * 100).toFixed(1)}–${(e.hi * 100).toFixed(1)}`;
 // "62.1% (48.6–75.0)": the estimate and its 95% interval.
 export const withInterval = (e: Estimate) => `${pct(e.value)} (${interval(e)})`;
+// A failure rate from a pass rate: the interval flips with it.
+export const flipped = (e: Estimate | null): Estimate | null => (e === null ? null : { value: 1 - e.value, lo: 1 - e.hi, hi: 1 - e.lo });
 export const pValue = (p: number) => (p < 0.001 ? "< 0.001" : p.toFixed(3));
 
 // Tasks × tries, the sample size every number carries.

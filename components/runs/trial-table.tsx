@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { TRIAL_STATUSES, type TrialStatus } from "@/src/results/schema";
 import { formatMs } from "@/components/playground/transcript";
+import { describeTag } from "@/src/stats/graders";
 import { formatCount, STATUS_CLASS } from "./format";
 
 // One try as the table shows it. Holdout rows carry the outcome alone.
@@ -14,8 +15,13 @@ export type TrialRow = {
   category: string;
   difficulty: string;
   status: TrialStatus;
-  // Why it didn't pass, in the grader's or the error's own words.
+  // Why it didn't pass, in the outcome grader's or the error's own words.
   why: string | null;
+  // The trajectory graders that failed or couldn't grade it: reported, but
+  // not why it passed or failed.
+  flags: string[];
+  // What the grader report's numbers link by (see trialTags).
+  tags: string[];
   detail: { calls: number; replayed: number; tokens: number; modelMs: number; end: string | null } | null;
 };
 
@@ -28,17 +34,18 @@ export function TrialTable({ runId, rows: allRows, sealed }: { runId: string; ro
   const pathname = usePathname();
   const category = params.get("category");
   const difficulty = params.get("difficulty");
+  const tag = params.get("tag");
   // Following a new number shows all its tries, not just the outcome that
   // happened to be picked for the last one.
   const [picked, setPicked] = useState<{ for: string; filter: Filter }>({ for: "", filter: "all" });
-  const scopeKey = `${category}|${difficulty}`;
+  const scopeKey = `${category}|${difficulty}|${tag}`;
   const filter = picked.for === scopeKey ? picked.filter : "all";
   const setFilter = (f: Filter) => setPicked({ for: scopeKey, filter: f });
-  const rows = allRows.filter((r) => (category === null || r.category === category) && (difficulty === null || r.difficulty === difficulty));
+  const rows = allRows.filter((r) => (category === null || r.category === category) && (difficulty === null || r.difficulty === difficulty) && (tag === null || r.tags.includes(tag)));
   const shown = filter === "all" ? rows : rows.filter((r) => r.status === filter);
   const count = (f: Filter) => (f === "all" ? rows.length : rows.filter((r) => r.status === f).length);
   const cell = "px-3 py-1.5 align-top";
-  const scope = [category && `${category} tasks`, difficulty && `${difficulty} tasks`].filter(Boolean).join(", ");
+  const scope = [category && `${category} tasks`, difficulty && `${difficulty} tasks`, tag && `tries that ${describeTag(tag)}`].filter(Boolean).join(", ");
 
   return (
     <div id="trials" className="min-w-0 scroll-mt-4">
@@ -80,6 +87,7 @@ export function TrialTable({ runId, rows: allRows, sealed }: { runId: string; ro
                   <th className={`${cell} text-right font-normal`}>tokens</th>
                   <th className={`${cell} text-right font-normal`}>model time</th>
                   <th className={`${cell} font-normal`}>why it didn&apos;t pass</th>
+                  <th className={`${cell} font-normal`}>trajectory graders failed</th>
                 </>
               )}
             </tr>
@@ -87,7 +95,7 @@ export function TrialTable({ runId, rows: allRows, sealed }: { runId: string; ro
           <tbody>
             {shown.length === 0 && (
               <tr>
-                <td colSpan={sealed ? 5 : 10} className={`${cell} text-muted-foreground`}>
+                <td colSpan={sealed ? 5 : 11} className={`${cell} text-muted-foreground`}>
                   No {filter === "all" ? "" : `${filter} `}tries {scope === "" ? "in this run" : `among ${scope}`}.
                 </td>
               </tr>
@@ -120,6 +128,7 @@ export function TrialTable({ runId, rows: allRows, sealed }: { runId: string; ro
                     <td className={`${cell} text-right font-mono`}>{formatCount(row.detail.tokens)}</td>
                     <td className={`${cell} text-right font-mono whitespace-nowrap`}>{formatMs(row.detail.modelMs)}</td>
                     <td className={`${cell} max-w-[40rem] min-w-64 text-muted-foreground`}>{row.why ?? ""}</td>
+                    <td className={`${cell} min-w-40 font-mono text-[11px] text-fail`}>{row.flags.join(", ")}</td>
                   </>
                 )}
               </tr>

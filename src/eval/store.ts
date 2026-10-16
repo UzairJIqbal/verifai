@@ -9,6 +9,7 @@ import { PROJECT_ROOT, REASONING_EFFORTS } from "../config";
 import { SPLITS } from "../tasks/schema";
 import { stepSchema, TRIAL_STATUSES, recordedTrialSchema, verdictSchema, type RecordedTrial } from "../results/schema";
 import type { Redact } from "./redact";
+import type { Verdict } from "./trajectory";
 
 export const EVAL_STORE_PATH = join(PROJECT_ROOT, "data", "evals.db");
 
@@ -122,6 +123,8 @@ CREATE TABLE IF NOT EXISTS grades (
   grader TEXT NOT NULL,
   pass INTEGER NOT NULL,
   reason TEXT NOT NULL,
+  step INTEGER,
+  ungraded INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (run_id, task_id, try, grader)
 );
 CREATE TABLE IF NOT EXISTS cache (
@@ -171,6 +174,16 @@ export class EvalStore {
     this.db = new DatabaseSync(path);
     this.db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
     this.db.exec(SCHEMA);
+    this.migrate();
+  }
+
+  // Stores made before verdicts pointed at a step: add the columns. Their old
+  // grades keep a null step and count as graded, which they were.
+  private migrate(): void {
+    const columns = z.array(z.object({ name: z.string() })).parse(this.db.prepare("PRAGMA table_info(grades)").all());
+    const has = new Set(columns.map((c) => c.name));
+    if (!has.has("step")) this.db.exec("ALTER TABLE grades ADD COLUMN step INTEGER");
+    if (!has.has("ungraded")) this.db.exec("ALTER TABLE grades ADD COLUMN ungraded INTEGER NOT NULL DEFAULT 0");
   }
 
   close(): void {
@@ -217,6 +230,11 @@ export class EvalStore {
       .prepare("SELECT * FROM runs WHERE status = 'running' AND fingerprint = ? ORDER BY created_at DESC, id DESC LIMIT 1")
       .get(fingerprint);
     return row === undefined ? null : this.toRun(row);
+  }
+
+  // Newest first.
+  finishedRuns(): StoredRun[] {
+    return this.db.prepare("SELECT * FROM runs WHERE status = 'finished' ORDER BY created_at DESC, id DESC").all().map((row) => this.toRun(row));
   }
 
   unfinishedRuns(): StoredRun[] {
@@ -283,17 +301,34 @@ export class EvalStore {
         );
       const step = this.db.prepare("INSERT INTO steps (run_id, task_id, try, seq, type, payload_json) VALUES (?, ?, ?, ?, ?, ?)");
       trial.steps.forEach((s, seq) => step.run(runId, trial.taskId, trial.tryNumber, seq, s.type, this.json(s)));
-      const grade = this.db.prepare("INSERT INTO grades (run_id, task_id, try, grader, pass, reason) VALUES (?, ?, ?, ?, ?, ?)");
-      for (const v of trial.verdicts) grade.run(runId, trial.taskId, trial.tryNumber, v.grader, v.pass ? 1 : 0, this.redact(v.reason));
+      this.insertGrades(runId, trial.taskId, trial.tryNumber, trial.verdicts);
+    });
+  }
+
+  private insertGrades(runId: string, taskId: string, tryNumber: number, verdicts: Verdict[]): void {
+    const grade = this.db.prepare("INSERT INTO grades (run_id, task_id, try, grader, pass, reason, step, ungraded) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    for (const v of verdicts) grade.run(runId, taskId, tryNumber, v.grader, v.pass ? 1 : 0, this.redact(v.reason), v.step, v.ungraded ? 1 : 0);
+  }
+
+  // Regrading: every try's grades and status replaced at once, or none.
+  replaceGrades(runId: string, trials: { taskId: string; tryNumber: number; status: RecordedTrial["status"]; verdicts: Verdict[] }[]): void {
+    this.transaction(() => {
+      const status = this.db.prepare("UPDATE trials SET status = ? WHERE run_id = ? AND task_id = ? AND try = ?");
+      const clear = this.db.prepare("DELETE FROM grades WHERE run_id = ? AND task_id = ? AND try = ?");
+      for (const t of trials) {
+        if (status.run(t.status, runId, t.taskId, t.tryNumber).changes !== 1) throw new Error(`Run ${runId} has no try ${t.taskId}#${t.tryNumber} to regrade.`);
+        clear.run(runId, t.taskId, t.tryNumber);
+        this.insertGrades(runId, t.taskId, t.tryNumber, t.verdicts);
+      }
     });
   }
 
   loadTrials(runId: string): RecordedTrial[] {
     const rows = this.db.prepare("SELECT * FROM trials WHERE run_id = ? ORDER BY task_id, try").all(runId).map((r) => trialRowSchema.parse(r));
     const stepsOf = this.db.prepare("SELECT payload_json FROM steps WHERE run_id = ? AND task_id = ? AND try = ? ORDER BY seq");
-    const gradesOf = this.db.prepare("SELECT grader, pass, reason FROM grades WHERE run_id = ? AND task_id = ? AND try = ? ORDER BY rowid");
+    const gradesOf = this.db.prepare("SELECT grader, pass, reason, step, ungraded FROM grades WHERE run_id = ? AND task_id = ? AND try = ? ORDER BY rowid");
     const payloads = z.array(z.object({ payload_json: z.string() }));
-    const grades = z.array(z.object({ grader: z.string(), pass: z.number(), reason: z.string() }));
+    const grades = z.array(z.object({ grader: z.string(), pass: z.number(), reason: z.string(), step: z.number().nullable(), ungraded: z.number() }));
     return rows.map((r) => {
       const args: SQLInputValue[] = [runId, r.task_id, r.try];
       return recordedTrialSchema.parse({
@@ -303,7 +338,7 @@ export class EvalStore {
         status: r.status,
         end: r.end_reason,
         error: r.error,
-        verdicts: grades.parse(gradesOf.all(...args)).map((g) => verdictSchema.parse({ grader: g.grader, pass: g.pass === 1, reason: g.reason })),
+        verdicts: grades.parse(gradesOf.all(...args)).map((g) => verdictSchema.parse({ grader: g.grader, pass: g.pass === 1, reason: g.reason, step: g.step, ungraded: g.ungraded === 1 })),
         calls: r.calls,
         cachedCalls: r.cached_calls,
         usage: { inputTokens: r.input_tokens, cachedInputTokens: r.cached_input_tokens, outputTokens: r.output_tokens },

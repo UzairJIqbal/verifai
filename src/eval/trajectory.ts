@@ -19,4 +19,8 @@ export type Trajectory = {
   changes: RowChange[];
 };
 
-export type Verdict = { grader: string; pass: boolean; reason: string };
+// `step` is the index of the event the verdict is about (the same index as the
+// try's recorded steps), or null when it's about the try as a whole. An
+// ungraded verdict couldn't run on this try (missing data): it never passes,
+// and it's counted apart from passes and fails.
+export type Verdict = { grader: string; pass: boolean; reason: string; step: number | null; ungraded: boolean };

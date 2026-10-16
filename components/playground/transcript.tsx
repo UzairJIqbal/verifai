@@ -27,26 +27,44 @@ export const formatMs = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000)
 
 // One row of the log: who, at which step, and what. A live chat slides each
 // row in as it arrives; a recorded try is still, since nothing new arrives.
+// A recorded try's row can carry what the graders said about it: `at` is its
+// place in the try (#N, as grader reasons cite it), `failing` marks it red.
+export type RowMarks = { at?: number; failing?: boolean; notes?: ReactNode };
+
 function Row({
   who,
   step,
   children,
   className,
   still = false,
+  marks,
 }: {
   who: string;
   step?: number;
   children: ReactNode;
   className?: string;
   still?: boolean;
+  marks?: RowMarks;
 }) {
   return (
-    <li className={cn("grid grid-cols-[3.25rem_minmax(0,1fr)] gap-x-3 py-2", !still && "step-in", className)}>
+    <li
+      id={marks?.at !== undefined ? `at-${marks.at}` : undefined}
+      className={cn(
+        "grid scroll-mt-4 grid-cols-[3.25rem_minmax(0,1fr)] gap-x-3 py-2",
+        !still && "step-in",
+        marks?.failing && "-mx-3 border-l-2 border-l-fail bg-fail/5 pr-3 pl-[10px]",
+        className,
+      )}
+    >
       <div className="pt-px text-right text-[11px] leading-5 text-muted-foreground">
         <div>{who}</div>
         {step !== undefined && <div className="font-mono">step {step}</div>}
+        {marks?.at !== undefined && <div className="font-mono">#{marks.at}</div>}
       </div>
-      <div className="min-w-0">{children}</div>
+      <div className="min-w-0">
+        {children}
+        {marks?.notes}
+      </div>
     </li>
   );
 }
@@ -106,29 +124,29 @@ function ToolCard({ item }: { item: Extract<TranscriptItem, { kind: "tool" }> })
   );
 }
 
-export function TranscriptRow({ item, still = false }: { item: TranscriptItem; still?: boolean }) {
+export function TranscriptRow({ item, still = false, marks }: { item: TranscriptItem; still?: boolean; marks?: RowMarks }) {
   switch (item.kind) {
     case "user":
       return (
-        <Row who={item.who ?? "you"} still={still}>
+        <Row who={item.who ?? "you"} still={still} marks={marks}>
           <p className="whitespace-pre-wrap wrap-anywhere">{item.text}</p>
         </Row>
       );
     case "agent":
       return (
-        <Row who="agent" step={item.step} still={still}>
+        <Row who="agent" step={item.step} still={still} marks={marks}>
           <p className="whitespace-pre-wrap wrap-anywhere">{item.text}</p>
         </Row>
       );
     case "tool":
       return (
-        <Row who="tool" step={item.step} still={still}>
+        <Row who="tool" step={item.step} still={still} marks={marks}>
           <ToolCard item={item} />
         </Row>
       );
     case "call":
       return (
-        <Row who="model" step={item.step} still={still} className="py-1">
+        <Row who="model" step={item.step} still={still} marks={marks} className="py-1">
           <p className="font-mono text-[11px] leading-5 text-muted-foreground">
             {item.provider} · {n(item.inputTokens)} in{item.cachedInputTokens > 0 && ` (${n(item.cachedInputTokens)} cached)`} · {n(item.outputTokens)} out ·{" "}
             {formatMs(item.latencyMs)}
@@ -138,7 +156,7 @@ export function TranscriptRow({ item, still = false }: { item: TranscriptItem; s
       );
     case "notice":
       return (
-        <Row who="" still={still}>
+        <Row who="" still={still} marks={marks}>
           <p className={cn("whitespace-pre-wrap wrap-anywhere", item.tone === "error" ? "text-fail" : "text-muted-foreground")}>
             {item.text}
           </p>

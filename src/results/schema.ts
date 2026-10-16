@@ -44,7 +44,18 @@ export const stepSchema = z.discriminatedUnion("type", [
 ]);
 export type Step = z.infer<typeof stepSchema>;
 
-export const verdictSchema = z.object({ grader: z.string(), pass: z.boolean(), reason: z.string() });
+// `step` and `ungraded` came with the trajectory graders; files written before
+// them read as "about the whole try" and "graded".
+export const verdictSchema = z.object({
+  grader: z.string(),
+  pass: z.boolean(),
+  reason: z.string(),
+  // The index into the try's steps the verdict points at.
+  step: z.number().int().nonnegative().nullable().default(null),
+  // Couldn't run on this try. Never a pass.
+  ungraded: z.boolean().default(false),
+});
+export type TrialVerdict = z.infer<typeof verdictSchema>;
 
 export const TRIAL_STATUSES = ["passed", "failed", "errored"] as const;
 export type TrialStatus = (typeof TRIAL_STATUSES)[number];
@@ -74,7 +85,10 @@ export type RecordedTrial = z.infer<typeof recordedTrialSchema>;
 
 // A try as the results files keep it: the recorded try plus its task's
 // difficulty, so the report can be split by it without the tasks file.
-export const trialSchema = recordedTrialSchema.extend({ difficulty: z.enum(DIFFICULTIES) });
+// `expectedTools` (the tools in the task's reference) is what tool precision
+// and recall are counted against; files from before the trajectory graders
+// don't have it.
+export const trialSchema = recordedTrialSchema.extend({ difficulty: z.enum(DIFFICULTIES), expectedTools: z.array(z.string()).optional() });
 export type Trial = z.infer<typeof trialSchema>;
 
 // A holdout try as the results files show it until its version is promoted:
@@ -85,7 +99,7 @@ export const sealedTrialSchema = z.object({
   difficulty: z.enum(DIFFICULTIES),
   tryNumber: z.number().int().positive(),
   status: z.enum(TRIAL_STATUSES),
-  verdicts: z.array(z.object({ grader: z.string(), pass: z.boolean() })),
+  verdicts: z.array(z.object({ grader: z.string(), pass: z.boolean(), ungraded: z.boolean().default(false) })),
 });
 export type SealedTrial = z.infer<typeof sealedTrialSchema>;
 
@@ -95,6 +109,53 @@ const estimateSchema = z.object({ value: rate, lo: rate, hi: rate });
 // One slice of a run. passHat[k − 1] is pass^k and passAt[k − 1] is pass@k,
 // each with its 95% bootstrap interval over tasks; pass^1 is the success rate.
 const sliceSchema = z.object({ tasks: count, tries: count, passed: count, passHat: z.array(estimateSchema), passAt: z.array(estimateSchema) });
+
+// Any average, not only a rate: tool calls per try can be above 1.
+const meanSchema = z.object({ value: z.number(), lo: z.number(), hi: z.number() });
+
+// One grader across a run. Tries are the ones that weren't errored; of those,
+// `graded` is how many it could run on. The rate is its pass rate over graded
+// tries, averaged over tasks, with a 95% interval; null if it graded none.
+const graderRowSchema = z.object({ grader: z.string(), tasks: count, tries: count, graded: count, passed: count, ungraded: count, rate: estimateSchema.nullable() });
+export type GraderRow = z.infer<typeof graderRowSchema>;
+
+// One tool across a run. Precision: of the tries that called it, the share
+// whose task needed it. Recall: of the tries whose task needed it, the share
+// that called it. Null when there's nothing to divide by.
+const toolRowSchema = z.object({
+  tool: z.string(),
+  tasks: count,
+  tries: count,
+  called: count,
+  expected: count,
+  both: count,
+  precision: estimateSchema.nullable(),
+  recall: estimateSchema.nullable(),
+});
+export type ToolRow = z.infer<typeof toolRowSchema>;
+
+export const graderReportSchema = z.object({
+  tasks: count,
+  // Tries the graders ran on: every try that wasn't errored.
+  tries: count,
+  errored: count,
+  graders: z.array(graderRowSchema),
+  // A try breaks the policy when any rule fails on it. Counted over tries
+  // where every rule could run.
+  policy: z.object({ tasks: count, tries: count, violated: count, rate: estimateSchema.nullable() }),
+  tools: z.array(toolRowSchema),
+  efficiency: z.object({
+    tasks: count,
+    tries: count,
+    // Tool calls per try, and the reference's, each averaged over tasks.
+    toolCalls: meanSchema.nullable(),
+    reference: meanSchema.nullable(),
+    // Tries with a repeated identical call, over tries the loop grader ran on.
+    loops: count,
+    loopRate: estimateSchema.nullable(),
+  }),
+});
+export type GraderReport = z.infer<typeof graderReportSchema>;
 
 export const runStatsSchema = z.object({
   overall: sliceSchema,
@@ -142,6 +203,9 @@ export const reportSchema = z.object({
   }),
   // Null for a smoke run, which is never a score.
   stats: runStatsSchema.nullable(),
+  // The trajectory graders, beside the success rate and never folded into
+  // it. Null for a smoke run, and absent from runs graded before them.
+  graders: graderReportSchema.nullable().default(null),
 });
 export type Report = z.infer<typeof reportSchema>;
 

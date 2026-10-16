@@ -2,6 +2,7 @@
 // give the refusal it requires. Plain text checks, no model.
 import { formatRupees } from "../shop/money";
 import type { Trajectory, Verdict } from "../eval/trajectory";
+import { fails, passes } from "./steps";
 import type { Fact, Task } from "../tasks/schema";
 
 // A refusal is any of these. Only tasks that require one look for it, and the
@@ -64,15 +65,15 @@ export function givesRefusal(text: string): boolean {
 // a fact stated while confirming is still stated.
 export function gradeReply(task: Task, trajectory: Trajectory): Verdict {
   const { facts, refusal } = task.expected;
-  if (facts.length === 0 && !refusal) return { grader: "reply", pass: true, reason: "nothing required of the reply" };
+  if (facts.length === 0 && !refusal) return passes("reply", "nothing required of the reply");
 
   const said = normalizeReply(
     trajectory.events.flatMap((e) => (e.type === "text" ? [e.text] : [])).join("\n"),
   );
   const problems = facts.filter((f) => !statesFact(said, f)).map((f) => `never states ${describeFact(f)}`);
   if (refusal && !givesRefusal(said)) problems.push("never refuses");
-  if (problems.length > 0) return { grader: "reply", pass: false, reason: problems.join("; ") };
+  if (problems.length > 0) return fails("reply", problems.join("; "), null);
 
   const parts = [...(facts.length > 0 ? [`states all ${facts.length} fact(s)`] : []), ...(refusal ? ["refuses"] : [])];
-  return { grader: "reply", pass: true, reason: parts.join(", ") };
+  return passes("reply", parts.join(", "));
 }

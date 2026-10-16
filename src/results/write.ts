@@ -5,9 +5,15 @@ import { PROJECT_ROOT } from "../config";
 import { configKey } from "../eval/plan";
 import type { RunConfig, StoredRun } from "../eval/store";
 import type { Redact } from "../eval/redact";
-import type { Difficulty } from "../tasks/schema";
+import type { Task } from "../tasks/schema";
+import { TOOL_NAMES } from "../agent/tools";
+import { GRADERS } from "../graders";
+import { expectedTools } from "../graders/tool-choice";
+import { POLICY_RULES } from "../graders/policy";
 import { outcomeRow, runStats, type RunStats, type Slice } from "../stats/report";
-import { pct, sampleSize, withInterval } from "../stats/format";
+import { graderReport } from "../stats/graders";
+import { flipped, pct, sampleSize, withInterval } from "../stats/format";
+import type { Estimate } from "../stats/stats";
 import {
   NOISE_FLOORS_FILE,
   noiseFloorSchema,
@@ -15,6 +21,7 @@ import {
   reportSchema,
   sealedTrialSchema,
   trialSchema,
+  type GraderReport,
   type NoiseFloor,
   type RecordedTrial,
   type Report,
@@ -24,13 +31,14 @@ import {
 
 export const RESULTS_DIR = join(PROJECT_ROOT, "results");
 
-// The store keeps tries without their task's difficulty; it's added from the
-// tasks the run was given. A try whose task isn't there is a bug, so it stops.
-export function withDifficulty(trials: RecordedTrial[], difficulties: Map<string, Difficulty>): Trial[] {
+// The store keeps tries without their task's difficulty and expected tools;
+// they're added from the tasks the run was given. A try whose task isn't
+// there is a bug, so it stops.
+export function withTaskInfo(trials: RecordedTrial[], tasks: Map<string, Task>): Trial[] {
   return trials.map((t) => {
-    const difficulty = difficulties.get(t.taskId);
-    if (difficulty === undefined) throw new Error(`Task ${t.taskId} has a saved try but isn't among the run's tasks, so its difficulty is unknown.`);
-    return { ...t, difficulty };
+    const task = tasks.get(t.taskId);
+    if (task === undefined) throw new Error(`Task ${t.taskId} has a saved try but isn't among the run's tasks, so its difficulty is unknown.`);
+    return { ...t, difficulty: task.difficulty, expectedTools: expectedTools(task) };
   });
 }
 
@@ -40,7 +48,7 @@ function countByProvider(trials: Trial[]): Record<string, number> {
   return counts;
 }
 
-export function buildReport(run: StoredRun, trials: Trial[], finishedAt: string): Report {
+export function buildReport(run: StoredRun, trials: Trial[], finishedAt: string, tasks: Map<string, Task>): Report {
   const c: RunConfig = run.config;
   const sum = (pick: (t: Trial) => number) => trials.reduce((total, t) => total + pick(t), 0);
   return reportSchema.parse({
@@ -79,6 +87,15 @@ export function buildReport(run: StoredRun, trials: Trial[], finishedAt: string)
       costUsd: sum((t) => t.costUsd),
     },
     stats: c.smoke ? null : runStats(trials.map(outcomeRow)),
+    graders: c.smoke
+      ? null
+      : graderReport({
+          trials,
+          graders: GRADERS,
+          policyRules: POLICY_RULES,
+          tools: TOOL_NAMES,
+          referenceLength: new Map([...tasks].map(([id, task]) => [id, task.reference.length])),
+        }),
   });
 }
 
@@ -91,7 +108,7 @@ export function sealTrial(trial: Trial): SealedTrial {
     difficulty: trial.difficulty,
     tryNumber: trial.tryNumber,
     status: trial.status,
-    verdicts: trial.verdicts.map((v) => ({ grader: v.grader, pass: v.pass })),
+    verdicts: trial.verdicts.map((v) => ({ grader: v.grader, pass: v.pass, ungraded: v.ungraded })),
   });
 }
 
@@ -107,6 +124,45 @@ export function statsTable(stats: RunStats): { header: string[]; rows: string[][
       ...Object.entries(stats.byDifficulty).map(([d, s]) => row(d, s)),
     ],
   };
+}
+
+const orDash = (e: Estimate | null) => (e === null ? "–" : withInterval(e));
+const averageWithInterval = (e: Estimate | null) => (e === null ? "–" : `${e.value.toFixed(2)} (${e.lo.toFixed(2)}–${e.hi.toFixed(2)})`);
+
+// The trajectory graders as tables, the same in the terminal and report.md.
+export function graderTables(g: GraderReport): { title: string; header: string[]; rows: string[][] }[] {
+  const policy = g.graders.filter((r) => POLICY_RULES.some((rule) => rule === r.grader));
+  return [
+    {
+      title: "Graders: pass rate over the tries each could grade",
+      // Failed, not passed, beside the pass rate: the same as the run page, so
+      // a count and its rate never read as the same thing twice.
+      header: ["grader", "tasks", "graded", "failed", "couldn't grade", "pass rate"],
+      rows: g.graders.map((r) => [r.grader, String(r.tasks), String(r.graded), `${r.graded - r.passed}/${r.graded}`, String(r.ungraded), orDash(r.rate)]),
+    },
+    {
+      title: "Policy: violation rate, overall and per rule",
+      header: ["rule", "tasks", "graded", "violated", "violation rate"],
+      rows: [
+        ["any rule", String(g.policy.tasks), String(g.policy.tries), `${g.policy.violated}/${g.policy.tries}`, orDash(g.policy.rate)],
+        ...policy.map((r) => [r.grader.replace("policy:", ""), String(r.tasks), String(r.graded), `${r.graded - r.passed}/${r.graded}`, orDash(flipped(r.rate))]),
+      ],
+    },
+    {
+      title: "Tools: precision (calls that were needed) and recall (needed tools that were called)",
+      header: ["tool", "called", "needed", "both", "precision", "recall"],
+      rows: g.tools.map((t) => [t.tool, String(t.called), String(t.expected), String(t.both), orDash(t.precision), orDash(t.recall)]),
+    },
+    {
+      title: "Efficiency",
+      header: ["", "tasks", "tries", "value"],
+      rows: [
+        ["tool calls per try", String(g.efficiency.tasks), String(g.efficiency.tries), averageWithInterval(g.efficiency.toolCalls)],
+        ["reference calls per try", String(g.efficiency.tasks), String(g.efficiency.tries), averageWithInterval(g.efficiency.reference)],
+        ["loop rate", String(g.efficiency.tasks), String(g.efficiency.tries), `${orDash(g.efficiency.loopRate)} · ${g.efficiency.loops} tries looped`],
+      ],
+    },
+  ];
 }
 
 // The success rate as one line: the headline of every report.
@@ -131,6 +187,22 @@ export function renderMarkdown(report: Report, trials: Trial[]): string {
     : [
         `**Smoke run: ${t.passed} of ${t.trials} tries passed, ${t.failed} failed, ${t.errored} errored.** It checks that the machinery works; it's never a score, a comparison or a gate.`,
       ];
+  const graders = report.graders
+    ? [
+        "",
+        "## Trajectory graders",
+        "",
+        `How each try got to its result, reported beside the success rate and never part of it. ${report.graders.tries} tries from ${report.graders.tasks} tasks; ${report.graders.errored} errored tries aren't graded. Rates are averaged over tasks with 95% intervals.`,
+        ...graderTables(report.graders).flatMap((table) => [
+          "",
+          `### ${table.title}`,
+          "",
+          `| ${table.header.join(" | ")} |`,
+          `| ${table.header.map(() => "---").join(" | ")} |`,
+          ...table.rows.map((r) => `| ${r.join(" | ")} |`),
+        ]),
+      ]
+    : [];
   const lines = [
     `# ${report.smoke ? "Smoke run" : "Run"} ${report.runId}`,
     "",
@@ -141,6 +213,7 @@ export function renderMarkdown(report: Report, trials: Trial[]): string {
     `- Started ${report.createdAt} · finished ${report.finishedAt}`,
     "",
     ...outcome,
+    ...graders,
     "",
     `Model calls: ${t.calls} (${t.cachedCalls} replayed from the cache; ${Object.entries(t.callsByProvider).map(([p, n]) => `${n} from ${p}`).join(", ") || "none"}) · tokens in ${t.usage.inputTokens} (${t.usage.cachedInputTokens} cached) · out ${t.usage.outputTokens} · cost $${t.costUsd.toFixed(4)} at list price`,
     "",
@@ -162,13 +235,13 @@ export function renderMarkdown(report: Report, trials: Trial[]): string {
 export function writeResults(
   run: StoredRun,
   recorded: RecordedTrial[],
-  difficulties: Map<string, Difficulty>,
+  tasks: Map<string, Task>,
   finishedAt: string,
   redact: Redact,
   dir: string = RESULTS_DIR,
 ): { dir: string; report: Report } {
-  const trials = withDifficulty(recorded, difficulties);
-  const report = buildReport(run, trials, finishedAt);
+  const trials = withTaskInfo(recorded, tasks);
+  const report = buildReport(run, trials, finishedAt, tasks);
   const runDir = join(dir, run.id);
   mkdirSync(runDir, { recursive: true });
   const lines = trials.map((trial) => JSON.stringify(report.split === "holdout" ? sealTrial(trial) : trialSchema.parse(trial)));

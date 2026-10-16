@@ -89,6 +89,39 @@ export function bootstrapMean(values: number[], options: { seed?: number; iterat
 
 export type Estimate = { value: number } & Interval;
 
+// A rate pooled over tasks: the sum of every task's hits over the sum of its
+// chances, like a tool's precision (calls that were right / calls). Tasks are
+// resampled, never single tries, for the same reason as bootstrapMean; a
+// resample with no chances at all has no ratio and is skipped. The caller
+// sorts by task id. NaN throughout when there are no chances anywhere.
+export function bootstrapRatio(parts: { hits: number; chances: number }[], options: { seed?: number; iterations?: number } = {}): Estimate {
+  const { seed = BOOTSTRAP_SEED, iterations = BOOTSTRAP_ITERATIONS } = options;
+  const hits = parts.reduce((a, p) => a + p.hits, 0);
+  const chances = parts.reduce((a, p) => a + p.chances, 0);
+  if (chances === 0) return { value: NaN, lo: NaN, hi: NaN };
+  const random = seededRandom(seed);
+  const n = parts.length;
+  const ratios: number[] = [];
+  for (let i = 0; i < iterations; i++) {
+    let h = 0;
+    let c = 0;
+    for (let j = 0; j < n; j++) {
+      const p = parts[Math.floor(random() * n)];
+      h += p.hits;
+      c += p.chances;
+    }
+    if (c > 0) ratios.push(h / c);
+  }
+  ratios.sort((a, b) => a - b);
+  return { value: hits / chances, lo: quantile(ratios, 0.025), hi: quantile(ratios, 0.975) };
+}
+
+// A plain average over tasks with its interval: each task's own average first,
+// so a task with more tries doesn't count for more. The caller sorts by task id.
+export function meanEstimate(values: number[]): Estimate {
+  return { value: mean(values), ...bootstrapMean(values) };
+}
+
 const byTask = (tasks: TaskOutcome[]) => [...tasks].sort((a, b) => (a.taskId < b.taskId ? -1 : a.taskId > b.taskId ? 1 : 0));
 
 // The largest k every task has tries for.

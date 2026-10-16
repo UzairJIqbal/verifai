@@ -7,8 +7,8 @@ import type { LanguageModel } from "ai";
 import type { AgentSetup, CallWrapper, ModelUsage } from "../agent/loop";
 import { runTaskConversation } from "./conversation";
 import type { TrajectoryEvent } from "./trajectory";
-import { gradeState } from "../graders/state";
-import { gradeReply } from "../graders/reply";
+import { gradeTry, outcomePassed } from "../graders";
+import type { ShopFacts } from "../graders/steps";
 import { stepSchema, type Step, type RecordedTrial, type TrialStatus } from "../results/schema";
 import type { Task } from "../tasks/schema";
 import { cacheKey, decodeCachedCall, encodeCachedCall } from "./cache";
@@ -68,6 +68,8 @@ export type RunnerOptions = {
   // The agent as configured; the runner picks the model for each call.
   setup: Omit<AgentSetup, "model" | "provider" | "wrapCall">;
   tasks: Task[];
+  // The seeded shop's ids and orders, which the trajectory graders check against.
+  shop: ShopFacts;
   concurrency: number;
   clock: Clock;
   // For a failure outside any one provider's call.
@@ -304,8 +306,8 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
       // Graders run outside the catch: one that throws stops the run loudly
       // rather than turning into an errored try.
       end = trajectory.end;
-      verdicts = [gradeState(task, trajectory), gradeReply(task, trajectory)];
-      status = verdicts.every((v) => v.pass) ? "passed" : "failed";
+      verdicts = gradeTry(task, trajectory, o.shop);
+      status = outcomePassed(verdicts) ? "passed" : "failed";
     } catch (caught) {
       if (caught instanceof StopRun) throw caught;
       status = "errored";

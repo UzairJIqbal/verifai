@@ -7,7 +7,12 @@ import { HoldoutLock } from "@/components/runs/holdout-lock";
 import { LoadError } from "@/components/runs/load-error";
 import { RunStatsReport } from "@/components/runs/run-stats";
 import { TrialTable, type TrialRow } from "@/components/runs/trial-table";
+import { GraderReportSection } from "@/components/runs/grader-report";
+import { OUTCOME_GRADERS } from "@/src/graders";
 import { readRun, type RunFiles } from "@/src/results/read";
+import { trialTags } from "@/src/stats/graders";
+
+const isOutcome = (grader: string) => OUTCOME_GRADERS.some((g) => g === grader);
 
 // The run id is only known per request, so it's read inside Suspense.
 export default function RunPage({ params }: { params: Promise<{ runId: string }> }) {
@@ -38,14 +43,22 @@ function Run({ runId }: { runId: string }) {
   const t = r.totals;
   const rows: TrialRow[] =
     files.split === "holdout"
-      ? files.trials.map((x) => ({ taskId: x.taskId, tryNumber: x.tryNumber, category: x.category, difficulty: x.difficulty, status: x.status, why: null, detail: null }))
+      ? files.trials.map((x) => ({ taskId: x.taskId, tryNumber: x.tryNumber, category: x.category, difficulty: x.difficulty, status: x.status, why: null, flags: [], tags: [], detail: null }))
       : files.trials.map((x) => ({
           taskId: x.taskId,
           tryNumber: x.tryNumber,
           category: x.category,
           difficulty: x.difficulty,
           status: x.status,
-          why: x.status === "errored" ? x.error : (x.verdicts.filter((v) => !v.pass).map((v) => `${v.grader}: ${v.reason}`).join(" · ") || null),
+          why:
+            x.status === "errored"
+              ? x.error
+              : x.verdicts
+                  .filter((v) => isOutcome(v.grader) && !v.pass)
+                  .map((v) => `${v.grader}: ${v.reason}`)
+                  .join(" · ") || null,
+          flags: x.verdicts.filter((v) => !isOutcome(v.grader) && !v.pass).map((v) => (v.ungraded ? `${v.grader} (couldn't grade)` : v.grader)),
+          tags: [...trialTags(x)],
           detail: { calls: x.calls, replayed: x.cachedCalls, tokens: countedTokens(x.usage), modelMs: x.modelLatencyMs, end: x.end },
         }));
 
@@ -126,6 +139,8 @@ function Run({ runId }: { runId: string }) {
           {t.errored} tries errored. They count as not passed, so these rates understate the agent.
         </p>
       )}
+
+      {r.graders && <GraderReportSection runId={r.runId} g={r.graders} linked={files.split !== "holdout"} />}
 
       {files.split === "holdout" && (
         <div className="mb-4">

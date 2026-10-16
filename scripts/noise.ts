@@ -7,7 +7,7 @@ import { styleText } from "node:util";
 import { budgetFor, compact, dim, executeRun, fatal, n, openSession, printProviders, remainingTries } from "../src/eval/session";
 import { measureNoise, outcomeRow } from "../src/stats/report";
 import { pct, points } from "../src/stats/format";
-import { appendNoiseFloor, withDifficulty } from "../src/results/write";
+import { appendNoiseFloor, withTaskInfo } from "../src/results/write";
 import type { NoiseFloor } from "../src/results/schema";
 
 const COMMAND = "pnpm noise";
@@ -80,7 +80,7 @@ async function main(): Promise<void> {
     fatal("The noise measurement doesn't have two separate finished runs. This is a bug; nothing was saved as a floor.");
   }
 
-  const rows = (runId: string) => withDifficulty(store.loadTrials(runId), s.difficulties).map(outcomeRow);
+  const rows = (runId: string) => withTaskInfo(store.loadTrials(runId), s.tasksById).map(outcomeRow);
   const noise = measureNoise(rows(runA), rows(runB));
   const floor: NoiseFloor = {
     configKey,

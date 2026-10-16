@@ -5,12 +5,12 @@ import { interval, pct } from "@/src/stats/format";
 import { CategoryChart } from "./category-chart";
 
 // The tries behind a slice: the run's trial list, filtered to it.
-export const trialsHref = (runId: string, filter: { category?: string; difficulty?: string } = {}) => {
+export const trialsHref = (runId: string, filter: { category?: string; difficulty?: string; tag?: string } = {}) => {
   const q = new URLSearchParams(Object.entries(filter).filter((e): e is [string, string] => e[1] !== undefined));
   return `/runs/${runId}${q.size > 0 ? `?${q}` : ""}#trials`;
 };
 
-const linkClass = "text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
+export const linkClass = "text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
 
 function Num({ e, href }: { e: Estimate; href: string }) {
   return (

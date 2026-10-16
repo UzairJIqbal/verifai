@@ -13,10 +13,13 @@ import { buildRunConfig, runFingerprint } from "./plan";
 import { makeRedactor } from "./redact";
 import { runTrials, STOP_AFTER_ERRORS_IN_A_ROW, type PoolProvider, type RunOutcome } from "./runner";
 import { EvalStore } from "./store";
+import { GRADERS } from "../graders";
+import { loadShopFacts } from "../graders/shop-facts";
 
 const dir = mkdtempSync(join(tmpdir(), "verifai-runner-test-"));
 const seedPath = join(dir, "shop.db");
 writeShop(seedPath);
+const shop = loadShopFacts(seedPath);
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
 const config = loadConfig();
@@ -102,6 +105,7 @@ async function run(
       done = p.done;
     },
     seedPath,
+    shop,
   });
   return { outcome, sent, replayed };
 }
@@ -119,7 +123,9 @@ describe("runner", () => {
     expect(sent).toBe(trials.length);
     for (const t of trials) {
       expect(t.status).toBe(t.taskId === "status-01" ? "passed" : "failed");
-      expect(t.verdicts.map((v) => v.grader)).toEqual(["state", "reply"]);
+      // Every grader is saved, step and all, and reads back the same.
+      expect(t.verdicts.map((v) => v.grader)).toEqual([...GRADERS]);
+      expect(t.verdicts.every((v) => "step" in v && typeof v.ungraded === "boolean")).toBe(true);
       expect(t.usage).toEqual({ inputTokens: 100, cachedInputTokens: 0, outputTokens: 20 });
       expect(t.steps.map((s) => s.type)).toEqual(["customer", "model", "text"]);
       expect(t.steps[1]).toMatchObject({ type: "model", provider: "groq" });

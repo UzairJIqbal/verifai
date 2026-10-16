@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   agreement,
   bootstrapMean,
+  bootstrapRatio,
   comb,
   flipRate,
   majorityPassed,
@@ -240,5 +241,29 @@ describe("agreement", () => {
   it("leaves κ undefined when both always gave the same answer", () => {
     expect(agreement([{ truth: true, predicted: true }]).kappa).toBeNaN();
     expect(agreement([{ truth: true, predicted: true }]).tnr).toBeNaN();
+  });
+});
+
+describe("bootstrapRatio", () => {
+  it("pools hits over chances rather than averaging tasks' ratios", () => {
+    // 1/1 and 0/3: the pooled rate is 1/4, the average of ratios would be 1/2.
+    expect(bootstrapRatio([{ hits: 1, chances: 1 }, { hits: 0, chances: 3 }]).value).toBe(0.25);
+  });
+  it("gives the same interval for the same input", () => {
+    const parts = [{ hits: 3, chances: 4 }, { hits: 1, chances: 4 }, { hits: 4, chances: 4 }, { hits: 0, chances: 2 }];
+    expect(bootstrapRatio(parts)).toEqual(bootstrapRatio(parts));
+    const e = bootstrapRatio(parts);
+    expect(e.lo).toBeLessThanOrEqual(e.value);
+    expect(e.hi).toBeGreaterThanOrEqual(e.value);
+  });
+  it("has no interval width when every task agrees", () => {
+    expect(bootstrapRatio([{ hits: 2, chances: 2 }, { hits: 4, chances: 4 }])).toEqual({ value: 1, lo: 1, hi: 1 });
+  });
+  it("is NaN, not zero, with no chances at all", () => {
+    expect(bootstrapRatio([{ hits: 0, chances: 0 }]).value).toBeNaN();
+  });
+  it("skips resamples with no chances instead of counting them as zero", () => {
+    // Half the tasks never had the chance; every resample with one is 100%.
+    expect(bootstrapRatio([{ hits: 2, chances: 2 }, { hits: 0, chances: 0 }])).toEqual({ value: 1, lo: 1, hi: 1 });
   });
 });

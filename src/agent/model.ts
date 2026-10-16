@@ -2,7 +2,7 @@ import { createGroq } from "@ai-sdk/groq";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { APICallError, RetryError, wrapLanguageModel, type LanguageModel } from "ai";
 import { z } from "zod";
-import { requireApiKey, type AgentProvider, type ApiKeySource, type Config, type PoolMember } from "../config";
+import { readOptionalEnv, requireApiKey, type AgentProvider, type ApiKeySource, type Config, type PoolMember } from "../config";
 
 type ProviderInfo = {
   label: string;
@@ -105,6 +105,11 @@ export function connectAgent(member: PoolMember, onRemainingTokens?: (tokens: nu
     dailyAfterLimitErrors: info.dailyAfterLimitErrors,
   };
 }
+
+// The pool's keys as they are in .env.local, without connecting: for keeping
+// them out of files written by commands that never call a model.
+export const poolSecrets = (config: Config): (string | undefined)[] =>
+  config.agent.pool.flatMap((m) => PROVIDERS[m.provider].env.map((source) => readOptionalEnv(source.env)));
 
 // The playground and the terminal chat talk to the first provider in the pool.
 export const firstInPool = (config: Config): PoolMember => config.agent.pool[0];

@@ -2,6 +2,7 @@
 // expected changes exactly. Nothing missing, nothing extra.
 import type { Cell, Row, RowChange } from "../shop/diff";
 import type { Trajectory, Verdict } from "../eval/trajectory";
+import { fails, passes } from "./steps";
 import type { ExpectedChange, Task } from "../tasks/schema";
 
 // Text is compared ignoring case and runs of spaces, so "house 12,  canal road"
@@ -66,11 +67,11 @@ export function gradeState(task: Task, trajectory: Trajectory): Verdict {
 
   if (missing.length === 0 && unmatched.length === 0) {
     const n = task.expected.changes.length;
-    return { grader: "state", pass: true, reason: n === 0 ? "nothing changed, as expected" : `all ${n} expected change(s), nothing else` };
+    return passes("state", n === 0 ? "nothing changed, as expected" : `all ${n} expected change(s), nothing else`);
   }
   const problems = [
     ...missing.map((c) => `missing: ${describeExpected(c)}`),
     ...unmatched.map((c) => `extra: ${describeChange(c)}`),
   ];
-  return { grader: "state", pass: false, reason: problems.join("; ") };
+  return fails("state", problems.join("; "), null);
 }

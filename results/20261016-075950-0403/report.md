@@ -21,6 +21,63 @@ Every number is averaged over tasks, with its 95% interval in brackets: tasks we
 | easy | 21 | 84 | 51/84 | 60.7% (44.0–77.4) | 49.2% (31.0–68.3) | 42.9% (23.8–63.1) | 38.1% (19.0–61.9) | 60.7% (44.0–77.4) | 72.2% (54.8–88.1) | 77.4% (59.5–92.9) | 81.0% (61.9–95.2) |
 | hard | 14 | 56 | 33/56 | 58.9% (37.5–78.6) | 47.6% (25.0–71.4) | 41.1% (17.9–66.1) | 35.7% (14.3–64.3) | 58.9% (37.5–78.6) | 70.2% (47.6–90.5) | 75.0% (53.6–94.6) | 78.6% (57.1–100.0) |
 
+## Trajectory graders
+
+How each try got to its result, reported beside the success rate and never part of it. 136 tries from 35 tasks; 4 errored tries aren't graded. Rates are averaged over tasks with 95% intervals.
+
+### Graders: pass rate over the tries each could grade
+
+| grader | tasks | graded | failed | couldn't grade | pass rate |
+| --- | --- | --- | --- | --- | --- |
+| state | 35 | 136 | 38/136 | 0 | 72.9% (60.0–84.3) |
+| reply | 35 | 136 | 16/136 | 0 | 88.6% (77.1–97.1) |
+| tool-choice | 35 | 136 | 36/136 | 0 | 74.3% (61.4–85.7) |
+| arguments | 35 | 136 | 0/136 | 0 | 100.0% (100.0–100.0) |
+| policy:identify-first | 35 | 136 | 2/136 | 0 | 98.6% (95.7–100.0) |
+| policy:look-up-first | 35 | 136 | 9/136 | 0 | 92.9% (84.3–99.3) |
+| policy:cancel-only-processing | 35 | 136 | 0/136 | 0 | 100.0% (100.0–100.0) |
+| policy:address-only-processing | 35 | 136 | 0/136 | 0 | 100.0% (100.0–100.0) |
+| policy:refund-rules | 35 | 136 | 0/136 | 0 | 100.0% (100.0–100.0) |
+| policy:large-refund-to-human | 35 | 136 | 4/136 | 0 | 97.1% (91.4–100.0) |
+| policy:confirm-first | 35 | 136 | 5/136 | 0 | 96.4% (92.1–100.0) |
+| policy:no-false-promises | 35 | 136 | 0/136 | 0 | 100.0% (100.0–100.0) |
+| efficiency | 35 | 136 | 0/136 | 0 | 100.0% (100.0–100.0) |
+| loop | 35 | 136 | 0/136 | 0 | 100.0% (100.0–100.0) |
+
+### Policy: violation rate, overall and per rule
+
+| rule | tasks | graded | violated | violation rate |
+| --- | --- | --- | --- | --- |
+| any rule | 35 | 136 | 19/136 | 14.3% (5.7–24.3) |
+| identify-first | 35 | 136 | 2/136 | 1.4% (0.0–4.3) |
+| look-up-first | 35 | 136 | 9/136 | 7.1% (0.7–15.7) |
+| cancel-only-processing | 35 | 136 | 0/136 | 0.0% (0.0–0.0) |
+| address-only-processing | 35 | 136 | 0/136 | 0.0% (0.0–0.0) |
+| refund-rules | 35 | 136 | 0/136 | 0.0% (0.0–0.0) |
+| large-refund-to-human | 35 | 136 | 4/136 | 2.9% (0.0–8.6) |
+| confirm-first | 35 | 136 | 5/136 | 3.6% (0.0–7.9) |
+| no-false-promises | 35 | 136 | 0/136 | 0.0% (0.0–0.0) |
+
+### Tools: precision (calls that were needed) and recall (needed tools that were called)
+
+| tool | called | needed | both | precision | recall |
+| --- | --- | --- | --- | --- | --- |
+| find_customer_by_email | 120 | 136 | 120 | 100.0% (100.0–100.0) | 88.2% (77.1–97.1) |
+| list_customer_orders | 19 | 19 | 17 | 89.5% (58.3–100.0) | 89.5% (66.7–100.0) |
+| get_order | 101 | 120 | 101 | 100.0% (100.0–100.0) | 84.2% (71.0–95.0) |
+| update_order_address | 14 | 23 | 14 | 100.0% (100.0–100.0) | 60.9% (37.5–85.7) |
+| cancel_order | 7 | 16 | 7 | 100.0% (100.0–100.0) | 43.8% (0.0–75.0) |
+| refund_order | 18 | 24 | 14 | 77.8% (33.3–100.0) | 58.3% (25.0–91.7) |
+| transfer_to_human | 13 | 24 | 13 | 100.0% (100.0–100.0) | 54.2% (9.4–100.0) |
+
+### Efficiency
+
+|  | tasks | tries | value |
+| --- | --- | --- | --- |
+| tool calls per try | 35 | 136 | 2.18 (1.95–2.39) |
+| reference calls per try | 35 | 136 | 2.71 (2.46–3.03) |
+| loop rate | 35 | 136 | 0.0% (0.0–0.0) · 0 tries looped |
+
 Model calls: 481 (0 replayed from the cache; 142 from cloudflare, 339 from groq) · tokens in 569847 (323328 cached) · out 24942 · cost $0.1062 at list price
 
 ## By task

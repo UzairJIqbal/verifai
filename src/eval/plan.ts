@@ -11,6 +11,9 @@ import type { RunConfig } from "./store";
 
 const sha256 = (value: unknown) => createHash("sha256").update(canonical(value)).digest("hex");
 
+// Which tasks a run was made on, exactly: a regrade checks it before reusing them.
+export const tasksHash = (tasks: Task[]): string => sha256(tasks);
+
 export function buildRunConfig(args: {
   config: Config;
   version: AgentVersion;
@@ -42,7 +45,7 @@ export function buildRunConfig(args: {
     triesPerTask: config.runner.triesPerTask,
     useCache: args.useCache,
     agentHash: sha256({ systemPrompt: version.systemPrompt, tools: describeTools(version.toolDescriptions) }),
-    tasksHash: sha256(args.tasks),
+    tasksHash: tasksHash(args.tasks),
   };
 }
 

@@ -436,5 +436,352 @@
         ]
       }
     }
+  },
+  "graders": {
+    "tasks": 35,
+    "tries": 136,
+    "errored": 4,
+    "graders": [
+      {
+        "grader": "state",
+        "tasks": 35,
+        "tries": 136,
+        "graded": 136,
+        "passed": 98,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.7285714285714285,
+          "lo": 0.6,
+          "hi": 0.8428571428571429
+        }
+      },
+      {
+        "grader": "reply",
+        "tasks": 35,
+        "tries": 136,
+        "graded": 136,
+        "passed": 120,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.8857142857142857,
+          "lo": 0.7714285714285715,
+          "hi": 0.9714285714285714
+        }
+      },
+      {
+        "grader": "tool-choice",
+        "tasks": 35,
+        "tries": 136,
+        "graded": 136,
+        "passed": 100,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.7428571428571429,
+          "lo": 0.6142857142857143,
+          "hi": 0.8571428571428571
+        }
+      },
+      {
+        "grader": "arguments",
+        "tasks": 35,
+        "tries": 136,
+        "graded": 136,
+        "passed": 136,
+        "ungraded": 0,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "policy:identify-first",
+        "tasks": 35,
+        "tries": 136,
+        "graded": 136,
+        "passed": 134,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.9857142857142858,
+          "lo": 0.9571428571428572,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "policy:look-up-first",
+        "tasks": 35,
+        "tries": 136,
+        "graded": 136,
+        "passed": 127,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.9285714285714286,
+          "lo": 0.8428571428571429,
+          "hi": 0.9928571428571429
+        }
+      },
+      {
+        "grader": "policy:cancel-only-processing",
+        "tasks": 35,
+        "tries": 136,
+        "graded": 136,
+        "passed": 136,
+        "ungraded": 0,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "policy:address-only-processing",
+        "tasks": 35,
+        "tries": 136,
+        "graded": 136,
+        "passed": 136,
+        "ungraded": 0,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "policy:refund-rules",
+        "tasks": 35,
+        "tries": 136,
+        "graded": 136,
+        "passed": 136,
+        "ungraded": 0,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "policy:large-refund-to-human",
+        "tasks": 35,
+        "tries": 136,
+        "graded": 136,
+        "passed": 132,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.9714285714285714,
+          "lo": 0.9142857142857143,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "policy:confirm-first",
+        "tasks": 35,
+        "tries": 136,
+        "graded": 136,
+        "passed": 131,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.9642857142857143,
+          "lo": 0.9214285714285714,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "policy:no-false-promises",
+        "tasks": 35,
+        "tries": 136,
+        "graded": 136,
+        "passed": 136,
+        "ungraded": 0,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "efficiency",
+        "tasks": 35,
+        "tries": 136,
+        "graded": 136,
+        "passed": 136,
+        "ungraded": 0,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "loop",
+        "tasks": 35,
+        "tries": 136,
+        "graded": 136,
+        "passed": 136,
+        "ungraded": 0,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      }
+    ],
+    "policy": {
+      "tasks": 35,
+      "tries": 136,
+      "violated": 19,
+      "rate": {
+        "value": 0.14285714285714285,
+        "lo": 0.05714285714285714,
+        "hi": 0.24285714285714285
+      }
+    },
+    "tools": [
+      {
+        "tool": "find_customer_by_email",
+        "tasks": 35,
+        "tries": 136,
+        "called": 120,
+        "expected": 136,
+        "both": 120,
+        "precision": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        },
+        "recall": {
+          "value": 0.8823529411764706,
+          "lo": 0.7714285714285715,
+          "hi": 0.970808209034169
+        }
+      },
+      {
+        "tool": "list_customer_orders",
+        "tasks": 35,
+        "tries": 136,
+        "called": 19,
+        "expected": 19,
+        "both": 17,
+        "precision": {
+          "value": 0.8947368421052632,
+          "lo": 0.5833333333333334,
+          "hi": 1
+        },
+        "recall": {
+          "value": 0.8947368421052632,
+          "lo": 0.6666666666666666,
+          "hi": 1
+        }
+      },
+      {
+        "tool": "get_order",
+        "tasks": 35,
+        "tries": 136,
+        "called": 101,
+        "expected": 120,
+        "both": 101,
+        "precision": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        },
+        "recall": {
+          "value": 0.8416666666666667,
+          "lo": 0.7096705266060105,
+          "hi": 0.9504132231404959
+        }
+      },
+      {
+        "tool": "update_order_address",
+        "tasks": 35,
+        "tries": 136,
+        "called": 14,
+        "expected": 23,
+        "both": 14,
+        "precision": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        },
+        "recall": {
+          "value": 0.6086956521739131,
+          "lo": 0.375,
+          "hi": 0.8571428571428571
+        }
+      },
+      {
+        "tool": "cancel_order",
+        "tasks": 35,
+        "tries": 136,
+        "called": 7,
+        "expected": 16,
+        "both": 7,
+        "precision": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        },
+        "recall": {
+          "value": 0.4375,
+          "lo": 0,
+          "hi": 0.75
+        }
+      },
+      {
+        "tool": "refund_order",
+        "tasks": 35,
+        "tries": 136,
+        "called": 18,
+        "expected": 24,
+        "both": 14,
+        "precision": {
+          "value": 0.7777777777777778,
+          "lo": 0.3333333333333333,
+          "hi": 1
+        },
+        "recall": {
+          "value": 0.5833333333333334,
+          "lo": 0.25,
+          "hi": 0.9166666666666666
+        }
+      },
+      {
+        "tool": "transfer_to_human",
+        "tasks": 35,
+        "tries": 136,
+        "called": 13,
+        "expected": 24,
+        "both": 13,
+        "precision": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        },
+        "recall": {
+          "value": 0.5416666666666666,
+          "lo": 0.09375,
+          "hi": 1
+        }
+      }
+    ],
+    "efficiency": {
+      "tasks": 35,
+      "tries": 136,
+      "toolCalls": {
+        "value": 2.1785714285714284,
+        "lo": 1.95,
+        "hi": 2.392857142857143
+      },
+      "reference": {
+        "value": 2.7142857142857144,
+        "lo": 2.4571428571428573,
+        "hi": 3.0285714285714285
+      },
+      "loops": 0,
+      "loopRate": {
+        "value": 0,
+        "lo": 0,
+        "hi": 0
+      }
+    }
   }
 }

@@ -1,4 +1,4 @@
-import type { Step } from "@/src/results/schema";
+import type { Step, TrialVerdict } from "@/src/results/schema";
 import type { TranscriptItem } from "@/components/playground/transcript";
 
 // A recorded try as the playground's rows: each tool call becomes one card
@@ -48,4 +48,18 @@ export function stepsToItems(steps: Step[]): TranscriptItem[] {
     }
   });
   return items;
+}
+
+// Each verdict that points at a step, under the row showing it. A tool
+// call's result is shown in its call's card, so a verdict pointing at the
+// result lands on the call: the last row at or before its step.
+export function verdictsByItem(items: TranscriptItem[], verdicts: TrialVerdict[]): Map<string, TrialVerdict[]> {
+  const out = new Map<string, TrialVerdict[]>();
+  for (const v of verdicts) {
+    if (v.step === null) continue;
+    const step = v.step;
+    const item = items.filter((i) => Number(i.id) <= step).at(-1);
+    if (item) out.set(item.id, [...(out.get(item.id) ?? []), v]);
+  }
+  return out;
 }

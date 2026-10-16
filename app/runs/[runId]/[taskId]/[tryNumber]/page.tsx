@@ -6,7 +6,8 @@ import { formatMs, TranscriptRow } from "@/components/playground/transcript";
 import { countedTokens, formatCount, STATUS_CLASS } from "@/components/runs/format";
 import { HoldoutLock } from "@/components/runs/holdout-lock";
 import { LoadError } from "@/components/runs/load-error";
-import { stepsToItems } from "@/components/runs/trajectory";
+import { stepsToItems, verdictsByItem } from "@/components/runs/trajectory";
+import { VerdictNote, VerdictSummary } from "@/components/runs/verdicts";
 import { readRun, type RunFiles } from "@/src/results/read";
 
 type Params = { runId: string; taskId: string; tryNumber: string };
@@ -60,6 +61,7 @@ function Trajectory({ runId, taskId, tryNumber }: Params) {
   const trial = files.trials.find((t) => t.taskId === taskId && String(t.tryNumber) === tryNumber);
   if (!trial) notFound();
   const items = stepsToItems(trial.steps);
+  const byItem = verdictsByItem(items, trial.verdicts);
 
   return (
     <>
@@ -78,15 +80,6 @@ function Trajectory({ runId, taskId, tryNumber }: Params) {
             <dd className="whitespace-pre-wrap text-fail">{trial.error}</dd>
           </>
         )}
-        {trial.verdicts.map((v) => (
-          <div key={v.grader} className="contents">
-            <dt className="text-muted-foreground">{v.grader} grader</dt>
-            <dd>
-              <span className={v.pass ? "text-pass" : "text-fail"}>{v.pass ? "✓ pass" : "✗ fail"}</span>{" "}
-              <span className="text-muted-foreground">{v.reason}</span>
-            </dd>
-          </div>
-        ))}
         <dt className="text-muted-foreground">Cost</dt>
         <dd className="font-mono">
           {trial.calls} {trial.calls === 1 ? "call" : "calls"}{trial.cachedCalls > 0 && ` (${trial.cachedCalls} replayed)`} · {formatCount(trial.usage.inputTokens)} in
@@ -106,12 +99,23 @@ function Trajectory({ runId, taskId, tryNumber }: Params) {
         </dd>
       </dl>
 
+      <VerdictSummary verdicts={trial.verdicts} errored={trial.status === "errored"} />
+
       {items.length === 0 ? (
         <p className="text-muted-foreground">No steps were recorded: the try failed before its first model call.</p>
       ) : (
         <ol className="max-w-[56rem] divide-y rounded-md border px-3">
           {items.map((item) => (
-            <TranscriptRow key={item.id} item={item} still />
+            <TranscriptRow
+              key={item.id}
+              item={item}
+              still
+              marks={{
+                at: Number(item.id),
+                failing: (byItem.get(item.id) ?? []).some((v) => !v.pass),
+                notes: (byItem.get(item.id) ?? []).map((v) => <VerdictNote key={v.grader} v={v} />),
+              }}
+            />
           ))}
         </ol>
       )}
