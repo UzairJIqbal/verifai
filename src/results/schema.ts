@@ -3,7 +3,7 @@
 // Browser-safe: no Node modules here.
 import { z } from "zod";
 import { REASONING_EFFORTS } from "../reasoning-effort";
-import { CATEGORIES, SPLITS } from "../tasks/schema";
+import { CATEGORIES, DIFFICULTIES, SPLITS } from "../tasks/schema";
 
 const count = z.number().int().nonnegative();
 const toolOutcome = z.discriminatedUnion("ok", [
@@ -49,7 +49,8 @@ export const verdictSchema = z.object({ grader: z.string(), pass: z.boolean(), r
 export const TRIAL_STATUSES = ["passed", "failed", "errored"] as const;
 export type TrialStatus = (typeof TRIAL_STATUSES)[number];
 
-export const trialSchema = z.object({
+// A try as the runner records it in the eval store.
+export const recordedTrialSchema = z.object({
   taskId: z.string(),
   category: z.enum(CATEGORIES),
   tryNumber: z.number().int().positive(),
@@ -69,6 +70,11 @@ export const trialSchema = z.object({
   traceUrl: z.string().nullable(),
   steps: z.array(stepSchema),
 });
+export type RecordedTrial = z.infer<typeof recordedTrialSchema>;
+
+// A try as the results files keep it: the recorded try plus its task's
+// difficulty, so the report can be split by it without the tasks file.
+export const trialSchema = recordedTrialSchema.extend({ difficulty: z.enum(DIFFICULTIES) });
 export type Trial = z.infer<typeof trialSchema>;
 
 // A holdout try as the results files show it until its version is promoted:
@@ -76,11 +82,25 @@ export type Trial = z.infer<typeof trialSchema>;
 export const sealedTrialSchema = z.object({
   taskId: z.string(),
   category: z.enum(CATEGORIES),
+  difficulty: z.enum(DIFFICULTIES),
   tryNumber: z.number().int().positive(),
   status: z.enum(TRIAL_STATUSES),
   verdicts: z.array(z.object({ grader: z.string(), pass: z.boolean() })),
 });
 export type SealedTrial = z.infer<typeof sealedTrialSchema>;
+
+const rate = z.number().min(0).max(1);
+const estimateSchema = z.object({ value: rate, lo: rate, hi: rate });
+
+// One slice of a run. passHat[k − 1] is pass^k and passAt[k − 1] is pass@k,
+// each with its 95% bootstrap interval over tasks; pass^1 is the success rate.
+const sliceSchema = z.object({ tasks: count, tries: count, passed: count, passHat: z.array(estimateSchema), passAt: z.array(estimateSchema) });
+
+export const runStatsSchema = z.object({
+  overall: sliceSchema,
+  byCategory: z.partialRecord(z.enum(CATEGORIES), sliceSchema),
+  byDifficulty: z.partialRecord(z.enum(DIFFICULTIES), sliceSchema),
+});
 
 export const reportSchema = z.object({
   runId: z.string(),
@@ -94,6 +114,10 @@ export const reportSchema = z.object({
   taskCount: count,
   triesPerTask: z.number().int().positive(),
   useCache: z.boolean(),
+  // Runs with the same key ran the same configuration: the same agent, the
+  // same words in its prompt and tools, the same tasks and tries. The cache
+  // setting isn't part of it.
+  configKey: z.string(),
   agent: z.object({
     // The providers the run could use, in the order it tried them.
     pool: z.array(z.string()).min(1),
@@ -116,7 +140,26 @@ export const reportSchema = z.object({
     usage: usageSchema,
     costUsd: z.number().nonnegative(),
   }),
+  // Null for a smoke run, which is never a score.
+  stats: runStatsSchema.nullable(),
 });
 export type Report = z.infer<typeof reportSchema>;
 
+const noiseSliceSchema = z.object({ tasks: count, outcomes: count, flips: count, flipRate: rate, floor: z.number().nonnegative() });
+
+// One run of the noise command: two runs of one configuration with the cache
+// off, how often their outcomes differed, and the smallest change in success
+// rate (as a fraction) that's bigger than that.
+export const noiseFloorSchema = z.object({
+  configKey: z.string(),
+  measuredAt: z.string(),
+  runs: z.tuple([z.string(), z.string()]),
+  datasetVersion: z.string(),
+  overall: noiseSliceSchema,
+  byCategory: z.partialRecord(z.enum(CATEGORIES), noiseSliceSchema),
+});
+export type NoiseFloor = z.infer<typeof noiseFloorSchema>;
+
 export const RESULT_FILES = { markdown: "report.md", json: "report.json", trials: "trials.jsonl" } as const;
+// Every noise measurement, one per line, in results/ beside the runs.
+export const NOISE_FLOORS_FILE = "noise-floors.jsonl";

@@ -8,6 +8,9 @@ export type Category = (typeof CATEGORIES)[number];
 export const SPLITS = ["dev", "holdout"] as const;
 export type Split = (typeof SPLITS)[number];
 
+export const DIFFICULTIES = ["easy", "hard"] as const;
+export type Difficulty = (typeof DIFFICULTIES)[number];
+
 // The tables a task may expect to change. The rest (products, customers,
 // order_items, shop_meta) have no tool that writes them, so any change there
 // is always an extra one.
@@ -52,7 +55,7 @@ export const taskSchema = z.strictObject({
   id: z.string().regex(/^[a-z]+-\d{2}$/, "an id looks like cancel-01"),
   split: z.enum(SPLITS),
   category: z.enum(CATEGORIES),
-  difficulty: z.enum(["easy", "hard"]),
+  difficulty: z.enum(DIFFICULTIES),
   adversarial: z.boolean(),
   // What the task is testing, in one line, for whoever reads the task list.
   note: z.string().trim().min(1),

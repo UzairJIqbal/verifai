@@ -4,7 +4,19 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { PROJECT_ROOT } from "../config";
-import { RESULT_FILES, reportSchema, sealedTrialSchema, trialSchema, type Report, type SealedTrial, type Trial } from "./schema";
+import { compareRuns, outcomeRow, widestNoise, type Comparison } from "../stats/report";
+import {
+  NOISE_FLOORS_FILE,
+  noiseFloorSchema,
+  RESULT_FILES,
+  reportSchema,
+  sealedTrialSchema,
+  trialSchema,
+  type NoiseFloor,
+  type Report,
+  type SealedTrial,
+  type Trial,
+} from "./schema";
 
 const RESULTS_DIR = join(PROJECT_ROOT, "results");
 const RUN_ID = /^[A-Za-z0-9_-]+$/;
@@ -69,4 +81,78 @@ export function readRun(runId: string): RunFiles | null {
   return report.split === "holdout"
     ? { report, split: "holdout", trials: parseLines(sealedTrialSchema) }
     : { report, split: "dev", trials: parseLines(trialSchema) };
+}
+
+export type NoiseFloors = { floors: Map<string, NoiseFloor>; problems: string[] };
+
+// The newest measurement for each configuration. A bad line is reported, not
+// skipped quietly, and never stands in as a floor.
+export function readNoiseFloors(): NoiseFloors {
+  const path = join(RESULTS_DIR, NOISE_FLOORS_FILE);
+  const floors = new Map<string, NoiseFloor>();
+  const problems: string[] = [];
+  if (!existsSync(/*turbopackIgnore: true*/ path)) return { floors, problems };
+  readFileSync(/*turbopackIgnore: true*/ path, "utf8")
+    .split("\n")
+    .forEach((line, i) => {
+      if (line.trim() === "") return;
+      let raw: unknown;
+      try {
+        raw = JSON.parse(line);
+      } catch {
+        problems.push(`results/${NOISE_FLOORS_FILE} line ${i + 1} isn't valid JSON.`);
+        return;
+      }
+      const parsed = noiseFloorSchema.safeParse(raw);
+      if (!parsed.success) {
+        problems.push(`results/${NOISE_FLOORS_FILE} line ${i + 1} doesn't match the expected shape:\n${z.prettifyError(parsed.error)}`);
+        return;
+      }
+      const seen = floors.get(parsed.data.configKey);
+      if (!seen || seen.measuredAt <= parsed.data.measuredAt) floors.set(parsed.data.configKey, parsed.data);
+    });
+  return { floors, problems };
+}
+
+// The floor two runs are judged against: one measured for either run's
+// configuration. When both have one, the wider, so nothing is called a change
+// that either configuration's own noise could explain.
+export function floorFor(a: Report, b: Report, floors: Map<string, NoiseFloor>): NoiseFloor | null {
+  const found = [floors.get(a.configKey), floors.get(b.configKey)].filter((f): f is NoiseFloor => f !== undefined);
+  if (found.length === 0) return null;
+  return found.reduce((x, y) => (y.overall.floor > x.overall.floor ? y : x));
+}
+
+// What differs between two runs' configurations, in words, so a comparison of
+// unlike runs says so.
+export function configDifferences(a: Report, b: Report): string[] {
+  const out: string[] = [];
+  const check = (label: string, x: unknown, y: unknown) => {
+    if (JSON.stringify(x) !== JSON.stringify(y)) out.push(`${label}: ${String(x)} → ${String(y)}`);
+  };
+  check("split", a.split, b.split);
+  check("dataset", a.datasetVersion, b.datasetVersion);
+  check("model", a.agent.model, b.agent.model);
+  check("providers", a.agent.pool.join(", "), b.agent.pool.join(", "));
+  check("temperature", a.agent.temperature, b.agent.temperature);
+  check("reasoning", a.agent.reasoningEffort, b.agent.reasoningEffort);
+  check("prompt", a.agent.promptVersion, b.agent.promptVersion);
+  check("tools", a.agent.toolDescriptionsVersion, b.agent.toolDescriptionsVersion);
+  check("max steps", a.agent.maxSteps, b.agent.maxSteps);
+  check("tries per task", a.triesPerTask, b.triesPerTask);
+  check("cache", a.useCache ? "on" : "off", b.useCache ? "on" : "off");
+  // Something outside the list above differs (a step timeout, a price), so
+  // the runs still don't share a configuration.
+  if (out.length === 0) check("configuration key", a.configKey, b.configKey);
+  return out;
+}
+
+export type RunComparison = { a: RunFiles; b: RunFiles; comparison: Comparison; floor: NoiseFloor | null; differences: string[] };
+
+export function compareRunFiles(a: RunFiles, b: RunFiles, floors: Map<string, NoiseFloor>): RunComparison {
+  const floor = floorFor(a.report, b.report, floors);
+  const measured = [floors.get(a.report.configKey), floors.get(b.report.configKey)].filter((f): f is NoiseFloor => f !== undefined);
+  const noise = widestNoise(measured.map((f) => ({ overall: f.overall, byCategory: f.byCategory })));
+  const rows = (r: RunFiles) => (r.split === "dev" ? r.trials.map(outcomeRow) : r.trials.map(outcomeRow));
+  return { a, b, comparison: compareRuns(rows(a), rows(b), noise), floor, differences: configDifferences(a.report, b.report) };
 }

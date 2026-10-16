@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import { TRIAL_STATUSES, type TrialStatus } from "@/src/results/schema";
 import { formatMs } from "@/components/playground/transcript";
 import { formatCount, STATUS_CLASS } from "./format";
@@ -11,6 +12,7 @@ export type TrialRow = {
   taskId: string;
   tryNumber: number;
   category: string;
+  difficulty: string;
   status: TrialStatus;
   // Why it didn't pass, in the grader's or the error's own words.
   why: string | null;
@@ -19,14 +21,35 @@ export type TrialRow = {
 
 type Filter = TrialStatus | "all";
 
-export function TrialTable({ runId, rows, sealed }: { runId: string; rows: TrialRow[]; sealed: boolean }) {
-  const [filter, setFilter] = useState<Filter>("all");
+export function TrialTable({ runId, rows: allRows, sealed }: { runId: string; rows: TrialRow[]; sealed: boolean }) {
+  // A category or difficulty comes from the link that was followed to get
+  // here (a number in the report), so it lives in the address.
+  const params = useSearchParams();
+  const pathname = usePathname();
+  const category = params.get("category");
+  const difficulty = params.get("difficulty");
+  // Following a new number shows all its tries, not just the outcome that
+  // happened to be picked for the last one.
+  const [picked, setPicked] = useState<{ for: string; filter: Filter }>({ for: "", filter: "all" });
+  const scopeKey = `${category}|${difficulty}`;
+  const filter = picked.for === scopeKey ? picked.filter : "all";
+  const setFilter = (f: Filter) => setPicked({ for: scopeKey, filter: f });
+  const rows = allRows.filter((r) => (category === null || r.category === category) && (difficulty === null || r.difficulty === difficulty));
   const shown = filter === "all" ? rows : rows.filter((r) => r.status === filter);
   const count = (f: Filter) => (f === "all" ? rows.length : rows.filter((r) => r.status === f).length);
   const cell = "px-3 py-1.5 align-top";
+  const scope = [category && `${category} tasks`, difficulty && `${difficulty} tasks`].filter(Boolean).join(", ");
 
   return (
-    <div className="min-w-0">
+    <div id="trials" className="min-w-0 scroll-mt-4">
+      {scope !== "" && (
+        <p className="mb-2 text-[12px]">
+          Showing the {rows.length} tries of {scope} only.{" "}
+          <Link href={`${pathname}#trials`} className="text-link hover:underline">
+            Show all {allRows.length}
+          </Link>
+        </p>
+      )}
       <div role="group" aria-label="Filter by outcome" className="mb-2 flex flex-wrap gap-1">
         {(["all", ...TRIAL_STATUSES] as const).map((f) => (
           <button
@@ -48,6 +71,7 @@ export function TrialTable({ runId, rows, sealed }: { runId: string; rows: Trial
               <th className={`${cell} font-normal`}>task</th>
               <th className={`${cell} font-normal`}>try</th>
               <th className={`${cell} font-normal`}>category</th>
+              <th className={`${cell} font-normal`}>difficulty</th>
               <th className={`${cell} font-normal`}>outcome</th>
               {!sealed && (
                 <>
@@ -63,8 +87,8 @@ export function TrialTable({ runId, rows, sealed }: { runId: string; rows: Trial
           <tbody>
             {shown.length === 0 && (
               <tr>
-                <td colSpan={sealed ? 4 : 9} className={`${cell} text-muted-foreground`}>
-                  No {filter} tries in this run.
+                <td colSpan={sealed ? 5 : 10} className={`${cell} text-muted-foreground`}>
+                  No {filter === "all" ? "" : `${filter} `}tries {scope === "" ? "in this run" : `among ${scope}`}.
                 </td>
               </tr>
             )}
@@ -84,6 +108,7 @@ export function TrialTable({ runId, rows, sealed }: { runId: string; rows: Trial
                 </td>
                 <td className={`${cell} font-mono`}>{row.tryNumber}</td>
                 <td className={cell}>{row.category}</td>
+                <td className={cell}>{row.difficulty}</td>
                 <td className={`${cell} ${STATUS_CLASS[row.status]}`}>{row.status}</td>
                 {row.detail && (
                   <>

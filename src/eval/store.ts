@@ -7,7 +7,7 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { z } from "zod";
 import { PROJECT_ROOT, REASONING_EFFORTS } from "../config";
 import { SPLITS } from "../tasks/schema";
-import { stepSchema, TRIAL_STATUSES, trialSchema, verdictSchema, type Trial } from "../results/schema";
+import { stepSchema, TRIAL_STATUSES, recordedTrialSchema, verdictSchema, type RecordedTrial } from "../results/schema";
 import type { Redact } from "./redact";
 
 export const EVAL_STORE_PATH = join(PROJECT_ROOT, "data", "evals.db");
@@ -141,7 +141,17 @@ CREATE TABLE IF NOT EXISTS provider_calls (
   output_tokens INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS provider_calls_at ON provider_calls (provider, at);
+-- A noise measurement in progress: the two identical runs it's made of, so
+-- \`pnpm noise\` carries on the same pair across days.
+CREATE TABLE IF NOT EXISTS noise_measurements (
+  config_key TEXT PRIMARY KEY,
+  run_a TEXT REFERENCES runs(id),
+  run_b TEXT REFERENCES runs(id)
+);
 `;
+
+export type NoiseMeasurement = { configKey: string; runA: string | null; runB: string | null };
+const noiseRowSchema = z.object({ config_key: z.string(), run_a: z.string().nullable(), run_b: z.string().nullable() });
 
 export type ProviderUsage = { calls: number; inputTokens: number; cachedInputTokens: number; outputTokens: number };
 
@@ -213,6 +223,23 @@ export class EvalStore {
     return this.db.prepare("SELECT * FROM runs WHERE status = 'running' ORDER BY created_at DESC").all().map((row) => this.toRun(row));
   }
 
+  // The measurement under way for a configuration; it's removed once its
+  // floor is saved, so measuring again starts a new pair.
+  noiseMeasurement(configKey: string): NoiseMeasurement | null {
+    const row = this.db.prepare("SELECT * FROM noise_measurements WHERE config_key = ?").get(configKey);
+    if (row === undefined) return null;
+    const r = noiseRowSchema.parse(row);
+    return { configKey: r.config_key, runA: r.run_a, runB: r.run_b };
+  }
+
+  saveNoiseMeasurement(m: NoiseMeasurement): void {
+    this.db.prepare("INSERT OR REPLACE INTO noise_measurements (config_key, run_a, run_b) VALUES (?, ?, ?)").run(m.configKey, m.runA, m.runB);
+  }
+
+  clearNoiseMeasurement(configKey: string): void {
+    this.db.prepare("DELETE FROM noise_measurements WHERE config_key = ?").run(configKey);
+  }
+
   finishRun(id: string, finishedAt: string): void {
     this.db.prepare("UPDATE runs SET status = 'finished', finished_at = ? WHERE id = ?").run(finishedAt, id);
   }
@@ -227,7 +254,7 @@ export class EvalStore {
 
   // A try is saved whole or not at all: its row, every step and every grade
   // in one transaction. A try that was cut off leaves nothing, and is redone.
-  saveTrial(runId: string, trial: Trial): void {
+  saveTrial(runId: string, trial: RecordedTrial): void {
     this.transaction(() => {
       this.db
         .prepare(
@@ -261,7 +288,7 @@ export class EvalStore {
     });
   }
 
-  loadTrials(runId: string): Trial[] {
+  loadTrials(runId: string): RecordedTrial[] {
     const rows = this.db.prepare("SELECT * FROM trials WHERE run_id = ? ORDER BY task_id, try").all(runId).map((r) => trialRowSchema.parse(r));
     const stepsOf = this.db.prepare("SELECT payload_json FROM steps WHERE run_id = ? AND task_id = ? AND try = ? ORDER BY seq");
     const gradesOf = this.db.prepare("SELECT grader, pass, reason FROM grades WHERE run_id = ? AND task_id = ? AND try = ? ORDER BY rowid");
@@ -269,7 +296,7 @@ export class EvalStore {
     const grades = z.array(z.object({ grader: z.string(), pass: z.number(), reason: z.string() }));
     return rows.map((r) => {
       const args: SQLInputValue[] = [runId, r.task_id, r.try];
-      return trialSchema.parse({
+      return recordedTrialSchema.parse({
         taskId: r.task_id,
         category: r.category,
         tryNumber: r.try,
