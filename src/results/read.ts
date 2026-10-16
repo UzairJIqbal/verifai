@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { PROJECT_ROOT } from "../config";
-import { compareRuns, outcomeRow, type Comparison, type Noise } from "../stats/report";
+import { compareRuns, outcomeRow, widestNoise, type Comparison } from "../stats/report";
 import {
   NOISE_FLOORS_FILE,
   noiseFloorSchema,
@@ -141,6 +141,9 @@ export function configDifferences(a: Report, b: Report): string[] {
   check("max steps", a.agent.maxSteps, b.agent.maxSteps);
   check("tries per task", a.triesPerTask, b.triesPerTask);
   check("cache", a.useCache ? "on" : "off", b.useCache ? "on" : "off");
+  // Something outside the list above differs (a step timeout, a price), so
+  // the runs still don't share a configuration.
+  if (out.length === 0) check("configuration key", a.configKey, b.configKey);
   return out;
 }
 
@@ -148,7 +151,8 @@ export type RunComparison = { a: RunFiles; b: RunFiles; comparison: Comparison; 
 
 export function compareRunFiles(a: RunFiles, b: RunFiles, floors: Map<string, NoiseFloor>): RunComparison {
   const floor = floorFor(a.report, b.report, floors);
-  const noise: Noise | null = floor && { overall: floor.overall, byCategory: floor.byCategory };
+  const measured = [floors.get(a.report.configKey), floors.get(b.report.configKey)].filter((f): f is NoiseFloor => f !== undefined);
+  const noise = widestNoise(measured.map((f) => ({ overall: f.overall, byCategory: f.byCategory })));
   const rows = (r: RunFiles) => (r.split === "dev" ? r.trials.map(outcomeRow) : r.trials.map(outcomeRow));
   return { a, b, comparison: compareRuns(rows(a), rows(b), noise), floor, differences: configDifferences(a.report, b.report) };
 }

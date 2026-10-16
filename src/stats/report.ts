@@ -112,6 +112,21 @@ export function measureNoise(a: OutcomeRow[], b: OutcomeRow[]): Noise {
   return { overall: noiseSlice(a, b), byCategory };
 }
 
+// When two configurations each have a floor, a change has to clear the wider
+// one, slice by slice: the overall and each category independently, since the
+// noisier configuration overall needn't be the noisier in every category.
+export function widestNoise(measured: Noise[]): Noise | null {
+  if (measured.length === 0) return null;
+  const wider = (x: NoiseSlice | undefined, y: NoiseSlice | undefined) => (x === undefined || (y !== undefined && y.floor > x.floor) ? y : x);
+  const byCategory: Partial<Record<Category, NoiseSlice>> = {};
+  for (const c of CATEGORIES) {
+    const slice = measured.map((n) => n.byCategory[c]).reduce(wider, undefined);
+    if (slice !== undefined) byCategory[c] = slice;
+  }
+  const overall = measured.map((n) => n.overall).reduce((x, y) => (y.floor > x.floor ? y : x));
+  return { overall, byCategory };
+}
+
 // Two runs on the tasks they share, for one slice. Rates are each run's
 // success rate on those tasks alone, so the difference is like for like.
 export type ComparisonRow = {

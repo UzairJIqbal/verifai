@@ -342,9 +342,11 @@ export async function executeRun(s: Session, args: { title: string; command: str
   }
 
   const finishedAt = new Date().toISOString();
-  store.finishRun(run.id, finishedAt);
   const finishedRun: StoredRun = { ...run, status: "finished", finishedAt };
   const written = writeResults(finishedRun, trials, s.difficulties, finishedAt, s.redact);
+  // Only once its files exist: if writing them fails, the run stays
+  // unfinished and the next `pnpm eval` writes them again.
+  store.finishRun(run.id, finishedAt);
   const { report } = written;
   if (smoke) {
     const t = report.totals;

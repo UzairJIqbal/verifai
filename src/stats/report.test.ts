@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareRuns, measureNoise, runStats, type OutcomeRow } from "./report";
+import { compareRuns, measureNoise, runStats, widestNoise, type NoiseSlice, type OutcomeRow } from "./report";
 
 // Tries for one task: `passes` of `tries` passed.
 const tries = (taskId: string, category: OutcomeRow["category"], passes: number, tries = 4): OutcomeRow[] =>
@@ -25,6 +25,24 @@ describe("noise", () => {
     expect(noise.byCategory.refund?.floor).toBe(0);
     // One task moved 0.25: 1.96 × 0.25 / 1.
     expect(noise.byCategory.cancel?.floor).toBeCloseTo(0.49, 12);
+  });
+});
+
+describe("widest noise", () => {
+  const slice = (floor: number): NoiseSlice => ({ tasks: 7, outcomes: 28, flips: 1, flipRate: 1 / 28, floor });
+
+  it("takes the wider floor for each slice on its own", () => {
+    const x = { overall: slice(0.1), byCategory: { refund: slice(0.3), cancel: slice(0.05) } };
+    const y = { overall: slice(0.2), byCategory: { cancel: slice(0.15), status: slice(0.4) } };
+    const n = widestNoise([x, y]);
+    expect(n?.overall.floor).toBe(0.2);
+    // refund is wider in the narrower configuration, and kept.
+    expect(n?.byCategory).toEqual({ refund: slice(0.3), cancel: slice(0.15), status: slice(0.4) });
+    expect(n?.byCategory.address).toBeUndefined();
+  });
+
+  it("is null with nothing measured", () => {
+    expect(widestNoise([])).toBeNull();
   });
 });
 
