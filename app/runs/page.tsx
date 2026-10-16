@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { EmptyState, PageHeading } from "@/components/shell/empty-state";
-import { formatPercent, formatWhen } from "@/components/runs/format";
+import { formatWhen } from "@/components/runs/format";
+import { interval, pct } from "@/src/stats/format";
 import { listRuns, type RunListing } from "@/src/results/read";
 
 type Loaded = { ok: true; data: RunListing } | { ok: false; error: string };
@@ -33,9 +34,9 @@ export default function RunsPage() {
   return (
     <>
       <PageHeading title="Runs">
-        Every finished run of <code>pnpm eval</code>, newest first. Success is the share of tries that passed, from the number of
-        tries shown. No error bar yet, so read small differences as noise. A smoke run only checks the machinery, so it has no success
-        rate.
+        Every finished run of <code>pnpm eval</code>, newest first. Success is the share of tries that passed and pass^4 the chance
+        all 4 tries of a task pass, each with its 95% interval in brackets. Runs whose intervals overlap may not differ at all: use{" "}
+        <Link href="/compare">Compare</Link> to tell. A smoke run only checks the machinery, so it has no score.
       </PageHeading>
 
       {problems.length > 0 && (
@@ -68,6 +69,7 @@ export default function RunsPage() {
                 <th className={`${cell} font-normal`}>agent</th>
                 <th className={`${cell} font-normal`}>tries</th>
                 <th className={`${cell} text-right font-normal`}>success</th>
+                <th className={`${cell} text-right font-normal`}>pass^4</th>
                 <th className={`${cell} text-right font-normal`}>errored</th>
                 <th className={`${cell} font-normal`}>cache</th>
               </tr>
@@ -98,14 +100,29 @@ export default function RunsPage() {
                     {r.taskCount} × {r.triesPerTask}
                   </td>
                   <td className={`${cell} text-right font-mono`}>
-                    {r.smoke ? (
+                    {r.smoke || !r.stats ? (
                       <span className="text-muted-foreground">
                         {r.totals.passed}/{r.totals.trials} <span className="font-sans">not a score</span>
                       </span>
                     ) : (
-                      <>
-                        {r.totals.passed}/{r.totals.trials} <span className="text-muted-foreground">({formatPercent(r.totals.passed, r.totals.trials)})</span>
-                      </>
+                      <Link href={`/runs/${r.runId}#trials`} className="text-foreground hover:underline">
+                        {pct(r.stats.overall.passHat[0].value)} <span className="text-muted-foreground">({interval(r.stats.overall.passHat[0])})</span>
+                      </Link>
+                    )}
+                  </td>
+                  <td className={`${cell} text-right font-mono`}>
+                    {r.stats && !r.smoke ? (
+                      (() => {
+                        const last = r.stats.overall.passHat[r.stats.overall.passHat.length - 1];
+                        return (
+                          <Link href={`/runs/${r.runId}#trials`} className="text-foreground hover:underline">
+                            {r.stats.overall.passHat.length === 4 ? "" : `pass^${r.stats.overall.passHat.length} `}
+                            {pct(last.value)} <span className="text-muted-foreground">({interval(last)})</span>
+                          </Link>
+                        );
+                      })()
+                    ) : (
+                      <span className="text-muted-foreground">–</span>
                     )}
                   </td>
                   <td className={`${cell} text-right font-mono ${r.totals.errored > 0 ? "text-fail" : "text-muted-foreground"}`}>{r.totals.errored}</td>

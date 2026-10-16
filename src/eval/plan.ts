@@ -50,6 +50,11 @@ export function buildRunConfig(args: {
 // unfinished one is carried on instead of starting another.
 export const runFingerprint = (config: RunConfig): string => sha256(config);
 
+// The configuration a noise floor belongs to: everything that decides how the
+// agent behaves on which tasks. The cache is left out because the noise runs
+// skip it and the runs they're compared with may not.
+export const configKey = (config: RunConfig): string => sha256({ ...config, useCache: null }).slice(0, 16);
+
 // e.g. 20261015-142233-3fa9: sorts by when it started, and never collides.
 export function newRunId(now: Date): string {
   const stamp = now.toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15);

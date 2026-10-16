@@ -5,6 +5,7 @@ import { PageHeading } from "@/components/shell/empty-state";
 import { countedTokens, formatCount, formatPercent, formatWhen } from "@/components/runs/format";
 import { HoldoutLock } from "@/components/runs/holdout-lock";
 import { LoadError } from "@/components/runs/load-error";
+import { RunStatsReport } from "@/components/runs/run-stats";
 import { TrialTable, type TrialRow } from "@/components/runs/trial-table";
 import { readRun, type RunFiles } from "@/src/results/read";
 
@@ -37,11 +38,12 @@ function Run({ runId }: { runId: string }) {
   const t = r.totals;
   const rows: TrialRow[] =
     files.split === "holdout"
-      ? files.trials.map((x) => ({ taskId: x.taskId, tryNumber: x.tryNumber, category: x.category, status: x.status, why: null, detail: null }))
+      ? files.trials.map((x) => ({ taskId: x.taskId, tryNumber: x.tryNumber, category: x.category, difficulty: x.difficulty, status: x.status, why: null, detail: null }))
       : files.trials.map((x) => ({
           taskId: x.taskId,
           tryNumber: x.tryNumber,
           category: x.category,
+          difficulty: x.difficulty,
           status: x.status,
           why: x.status === "errored" ? x.error : (x.verdicts.filter((v) => !v.pass).map((v) => `${v.grader}: ${v.reason}`).join(" · ") || null),
           detail: { calls: x.calls, replayed: x.cachedCalls, tokens: countedTokens(x.usage), modelMs: x.modelLatencyMs, end: x.end },
@@ -73,15 +75,14 @@ function Run({ runId }: { runId: string }) {
           </>
         ) : (
           <>
-            <dt className="text-muted-foreground">Success</dt>
+            <dt className="text-muted-foreground">Tries</dt>
             <dd>
-              <span className="font-mono font-medium">
-                {t.passed}/{t.trials} tries passed ({formatPercent(t.passed, t.trials)})
+              <span className="font-mono">
+                {t.passed}/{t.trials} passed ({formatPercent(t.passed, t.trials)})
               </span>
               <span className="text-muted-foreground">
                 {" "}
-                from {r.taskCount} tasks × {r.triesPerTask} tries; {t.failed} failed, {t.errored} errored. Errored tries count as not passed.
-                No error bar yet, so read this as rough.
+                from {r.taskCount} tasks × {r.triesPerTask} tries; {t.failed} failed, {t.errored} errored.
               </span>
             </dd>
           </>
@@ -108,11 +109,23 @@ function Run({ runId }: { runId: string }) {
             .join(", ") || "none answered"} · <span className="font-mono">{formatCount(countedTokens(t.usage))}</span> tokens counted · $
           {t.costUsd.toFixed(4)} at list price
         </dd>
+        <dt className="text-muted-foreground">Configuration</dt>
+        <dd>
+          <span className="font-mono">{r.configKey}</span>
+          <span className="text-muted-foreground"> · runs with the same key share a noise floor</span>
+        </dd>
         <dt className="text-muted-foreground">Ran</dt>
         <dd>
           {formatWhen(r.createdAt)} to {formatWhen(r.finishedAt)}
         </dd>
       </dl>
+
+      {r.stats && <RunStatsReport runId={r.runId} stats={r.stats} />}
+      {r.stats && t.errored > 0 && (
+        <p className="mb-4 text-[12px] text-fail">
+          {t.errored} tries errored. They count as not passed, so these rates understate the agent.
+        </p>
+      )}
 
       {files.split === "holdout" && (
         <div className="mb-4">

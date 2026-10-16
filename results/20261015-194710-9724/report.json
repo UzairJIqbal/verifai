@@ -8,6 +8,7 @@
   "taskCount": 5,
   "triesPerTask": 4,
   "useCache": true,
+  "configKey": "fda7792023dfde79",
   "agent": {
     "pool": [
       "groq",
@@ -37,5 +38,6 @@
       "outputTokens": 3549
     },
     "costUsd": 0.028718500000000004
-  }
+  },
+  "stats": null
 }

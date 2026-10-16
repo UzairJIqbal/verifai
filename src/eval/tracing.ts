@@ -6,7 +6,7 @@ import { propagateAttributes, setLangfuseTracerProvider, startObservation } from
 import { node } from "@opentelemetry/sdk-node";
 import { z } from "zod";
 import { readOptionalEnv } from "../config";
-import type { Step, Trial } from "../results/schema";
+import type { Step, RecordedTrial } from "../results/schema";
 import type { Task } from "../tasks/schema";
 import type { Redact } from "./redact";
 import type { RunConfig } from "./store";
@@ -94,7 +94,7 @@ function outputsOf(steps: Step[], index: number): { text: string; toolCalls: { n
   return out;
 }
 
-function traceTrial(runId: string, config: RunConfig, trial: Trial, task: Task, tracesUrl: string): string {
+function traceTrial(runId: string, config: RunConfig, trial: RecordedTrial, task: Task, tracesUrl: string): string {
   const versions = { prompt: config.promptVersion, tools: config.toolDescriptionsVersion, dataset: config.datasetVersion };
   return propagateAttributes(
     {

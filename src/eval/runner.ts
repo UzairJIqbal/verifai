@@ -9,7 +9,7 @@ import { runTaskConversation } from "./conversation";
 import type { TrajectoryEvent } from "./trajectory";
 import { gradeState } from "../graders/state";
 import { gradeReply } from "../graders/reply";
-import { stepSchema, type Step, type Trial, type TrialStatus } from "../results/schema";
+import { stepSchema, type Step, type RecordedTrial, type TrialStatus } from "../results/schema";
 import type { Task } from "../tasks/schema";
 import { cacheKey, decodeCachedCall, encodeCachedCall } from "./cache";
 import { countedTokens, estimateTokens, type Clock, type Pacer, type Ticket } from "./pacer";
@@ -45,7 +45,7 @@ export type Progress = {
 };
 
 // Turns a finished try into a trace and returns its link, or null.
-export type TrialTracer = (trial: Trial, task: Task) => string | null;
+export type TrialTracer = (trial: RecordedTrial, task: Task) => string | null;
 
 // One provider of the pool, ready to call, with its own per-minute budget.
 export type PoolProvider = {
@@ -115,14 +115,14 @@ function buildTrial(args: {
   task: Task;
   tryNumber: number;
   status: TrialStatus;
-  end: Trial["end"];
+  end: RecordedTrial["end"];
   error: string | null;
-  verdicts: Trial["verdicts"];
+  verdicts: RecordedTrial["verdicts"];
   events: TrajectoryEvent[];
   pool: RunConfig["agent"]["pool"];
   startedAt: number;
   finishedAt: number;
-}): Trial {
+}): RecordedTrial {
   const steps = args.events.map((e) => toStep(e, args.pool));
   const models = steps.filter((s): s is Extract<Step, { type: "model" }> => s.type === "model");
   const sum = (pick: (s: (typeof models)[number]) => number) => models.reduce((total, s) => total + pick(s), 0);
@@ -209,7 +209,7 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
     return { member: ready[0], ticket };
   };
 
-  const runOne = async (task: Task, tryNumber: number): Promise<Trial> => {
+  const runOne = async (task: Task, tryNumber: number): Promise<RecordedTrial> => {
     const events: TrajectoryEvent[] = [];
     const startedAt = clock.now();
 
@@ -293,9 +293,9 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
     };
 
     let status: TrialStatus;
-    let end: Trial["end"] = null;
+    let end: RecordedTrial["end"] = null;
     let error: string | null = null;
-    let verdicts: Trial["verdicts"] = [];
+    let verdicts: RecordedTrial["verdicts"] = [];
     try {
       // The wrapper picks the model for every call; the first in the pool is
       // only the setup's placeholder.
