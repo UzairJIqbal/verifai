@@ -54,8 +54,33 @@ export const verdictSchema = z.object({
   step: z.number().int().nonnegative().nullable().default(null),
   // Couldn't run on this try. Never a pass.
   ungraded: z.boolean().default(false),
+  // The exact text the verdict is about, at the step it was written in.
+  spans: z.array(z.object({ step: z.number().int().nonnegative(), text: z.string() })).default([]),
 });
 export type TrialVerdict = z.infer<typeof verdictSchema>;
+
+export const CLAIM_LABELS = ["supported", "contradicted", "unsupported"] as const;
+export type ClaimLabel = (typeof CLAIM_LABELS)[number];
+
+// One claim from the agent's replies, as the claim checker labelled it.
+// `step` is the reply it came from; `evidence` is what in the trajectory it
+// was checked against, quoted or pointed at.
+export const claimSchema = z.object({
+  step: z.number().int().nonnegative(),
+  text: z.string(),
+  label: z.enum(CLAIM_LABELS),
+  evidence: z.string(),
+  reason: z.string(),
+});
+export type Claim = z.infer<typeof claimSchema>;
+
+// What the claim checker made of one try. Ungraded when its answer couldn't
+// be read: never counted as supported.
+export const claimCheckSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("checked"), model: z.string(), promptVersion: z.string(), claims: z.array(claimSchema) }),
+  z.object({ status: z.literal("ungraded"), model: z.string(), promptVersion: z.string(), reason: z.string() }),
+]);
+export type ClaimCheck = z.infer<typeof claimCheckSchema>;
 
 export const TRIAL_STATUSES = ["passed", "failed", "errored"] as const;
 export type TrialStatus = (typeof TRIAL_STATUSES)[number];
@@ -80,6 +105,8 @@ export const recordedTrialSchema = z.object({
   finishedAt: z.string(),
   traceUrl: z.string().nullable(),
   steps: z.array(stepSchema),
+  // Null until `pnpm claims` has checked this try.
+  claims: claimCheckSchema.nullable().default(null),
 });
 export type RecordedTrial = z.infer<typeof recordedTrialSchema>;
 
@@ -157,6 +184,34 @@ export const graderReportSchema = z.object({
 });
 export type GraderReport = z.infer<typeof graderReportSchema>;
 
+// A share of tries with something wrong, averaged over tasks with its interval.
+const tryRateSchema = z.object({ tasks: count, tries: count, hits: count, rate: estimateSchema.nullable() });
+
+// The four hallucination rates. The two code checks run on every try; the
+// claim rates count only the tries the claim checker has read, and are null
+// until it has read any.
+export const hallucinationReportSchema = z.object({
+  fabricatedEntity: tryRateSchema,
+  fabricatedAction: tryRateSchema,
+  claims: z
+    .object({
+      // Who read them, as "<model> · claims <prompt version>". More than one
+      // only if the judge changed partway and `pnpm claims` hasn't caught up.
+      judges: z.array(z.string()),
+      // Tries checked, of the tries that could be (every try that wasn't errored).
+      checkable: count,
+      checked: count,
+      ungraded: count,
+      // Agent replies with at least one unsupported or contradicted claim,
+      // over every reply in the checked tries, pooled over tasks.
+      responses: z.object({ tasks: count, tries: count, replies: count, flagged: count, rate: estimateSchema.nullable() }),
+      // Unsupported claims over every claim, pooled over tasks.
+      claims: z.object({ tasks: count, tries: count, total: count, unsupported: count, contradicted: count, rate: estimateSchema.nullable() }),
+    })
+    .nullable(),
+});
+export type HallucinationReport = z.infer<typeof hallucinationReportSchema>;
+
 export const runStatsSchema = z.object({
   overall: sliceSchema,
   byCategory: z.partialRecord(z.enum(CATEGORIES), sliceSchema),
@@ -206,6 +261,8 @@ export const reportSchema = z.object({
   // The trajectory graders, beside the success rate and never folded into
   // it. Null for a smoke run, and absent from runs graded before them.
   graders: graderReportSchema.nullable().default(null),
+  // Null for a smoke run, and absent from runs graded before the checks.
+  hallucination: hallucinationReportSchema.nullable().default(null),
 });
 export type Report = z.infer<typeof reportSchema>;
 

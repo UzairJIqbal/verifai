@@ -21,6 +21,7 @@ import { makeRedactor, type Redact } from "./redact";
 import { runTrials, type PoolProvider, type Progress } from "./runner";
 import { EVAL_STORE_PATH, EvalStore, tryKey, type RunConfig, type StoredRun } from "./store";
 import { langfuseSecrets, startTracing, type Tracing } from "./tracing";
+import { claimCoverage, hallucinationTable } from "../results/hallucination-text";
 import { graderTables, statsTable, successLine, writeResults } from "../results/write";
 import type { Report } from "../results/schema";
 
@@ -75,7 +76,7 @@ function makeProgressLine(labels: Map<string, string>) {
 }
 
 // Sleeps that Ctrl-C can cut short, so a run waiting out a rate limit stops at once.
-function makeClock(): Clock & { wakeAll: () => void } {
+export function makeClock(): Clock & { wakeAll: () => void } {
   const wakers = new Set<() => void>();
   return {
     now: () => Date.now(),
@@ -193,7 +194,7 @@ export function budgetFor(s: Session, triesLeft: number, cachedTries: number): B
     triesLeft,
     cachedTries,
     callsPerTry: s.store.averageCallsPerTry() ?? 4,
-    usagePerCall: s.store.averageUsagePerCall() ?? { inputTokens: guessed, cachedInputTokens: 0, outputTokens: 0 },
+    usagePerCall: s.store.averageUsagePerCall(s.config.agent.pool.map((m) => m.provider)) ?? { inputTokens: guessed, cachedInputTokens: 0, outputTokens: 0 },
     providers: s.config.agent.pool.map((m) => ({ provider: m.provider, limits: m.freeTierLimits, usedToday: s.store.usageSince(m.provider, dayAgo) })),
   });
 }
@@ -208,7 +209,7 @@ export function printProviders(s: Session, budget: Budget): void {
 
 // The run report in the terminal: the success rate with its interval, then
 // pass^k and pass@k for the whole run, each category and each difficulty.
-function printTable(header: string[], rows: string[][], gapsBefore: number[] = []): void {
+export function printTable(header: string[], rows: string[][], gapsBefore: number[] = []): void {
   const table = [header, ...rows];
   const widths = header.map((_, i) => Math.max(...table.map((r) => r[i].length)));
   const line = (r: string[]) => `  ${r.map((cell, i) => (i === 0 ? cell.padEnd(widths[i]) : cell.padStart(widths[i]))).join("  ")}`;
@@ -227,6 +228,7 @@ export function printReport(report: Report): void {
   // A gap between the whole run, the categories and the difficulties.
   printTable(header, rows, [1, 1 + Object.keys(report.stats.byCategory).length]);
   printGraderReport(report);
+  printHallucinationReport(report);
   if (report.totals.errored > 0) {
     console.log(styleText(["yellow", "bold"], `⚠ ${report.totals.errored} tries errored. They count as not passed, so these rates understate the agent.`));
   }
@@ -243,6 +245,14 @@ export function printGraderReport(report: Report): void {
     console.log(`\n  ${styleText("bold", t.title)}`);
     printTable(t.header, t.rows);
   }
+}
+
+export function printHallucinationReport(report: Report): void {
+  if (!report.hallucination) return;
+  console.log(`\n${styleText("bold", "Hallucination")} ${dim("· rates averaged over tasks, 95% intervals")}`);
+  console.log(dim(`  ${claimCoverage(report.hallucination)}`));
+  const { header, rows } = hallucinationTable(report.hallucination);
+  printTable(header, rows);
 }
 
 export type RunOutcome = { run: StoredRun; finished: true; report: Report; dir: string } | { run: StoredRun; finished: false };
@@ -290,7 +300,7 @@ export async function executeRun(s: Session, args: { title: string; command: str
       styleText("yellow", `  Won't finish today. It stops cleanly when every provider is at its limit and \`${args.command}\` carries on; about ${budget.days} days in all.`),
     );
   }
-  console.log(`  Gemini (judge): 0 calls · no model graders yet\n`);
+  console.log(`  Judge (${config.judge.model}): 0 calls here · the claim checker runs on its own, with \`pnpm claims\`\n`);
 
   const clock = makeClock();
   // Each starts from what its provider still counts from calls in the last minute.

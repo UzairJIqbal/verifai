@@ -1,7 +1,7 @@
 // The per-grader section of a run report, from the tries' verdicts and steps,
 // and the tags that link each of its numbers to the tries behind it.
 // Browser-safe and pure.
-import type { GraderReport, GraderRow, ToolRow, Trial } from "../results/schema";
+import type { ClaimCheck, GraderReport, GraderRow, ToolRow, Trial } from "../results/schema";
 import { bootstrapRatio, meanEstimate, passEstimate, type Estimate, type TaskOutcome } from "./stats";
 
 const byTaskId = <T extends { taskId: string }>(rows: T[]) => [...rows].sort((a, b) => (a.taskId < b.taskId ? -1 : a.taskId > b.taskId ? 1 : 0));
@@ -15,7 +15,7 @@ function groupByTask<T extends { taskId: string }>(rows: T[]): Map<string, T[]> 
 // A share of tries, averaged over tasks with an interval: each task's own
 // share first, the same way the success rate is built. Tasks with no tries
 // in the share's denominator are left out.
-function shareOverTasks(rows: { taskId: string; hit: boolean }[]): Estimate | null {
+export function shareOverTasks(rows: { taskId: string; hit: boolean }[]): Estimate | null {
   if (rows.length === 0) return null;
   const tasks: TaskOutcome[] = [...groupByTask(rows)].map(([taskId, tries]) => ({ taskId, tries: tries.length, successes: tries.filter((t) => t.hit).length }));
   return passEstimate(tasks, 1, "hat");
@@ -123,10 +123,13 @@ export function graderReport(args: {
 // Tags a try carries, so every number in the section can link to its tries:
 // `fail:<grader>`, `ungraded:<grader>`, `policy-violation`, and per tool
 // `called:`, `expected:`, `right:` (called and needed), `wrong:` (called but
-// not needed) and `missed:` (needed but not called).
-export function trialTags(t: Pick<Trial, "status" | "verdicts" | "steps" | "expectedTools">): Set<string> {
+// not needed) and `missed:` (needed but not called). From the claim checker,
+// `claims:flagged` (a reply has an unsupported or contradicted claim),
+// `claims:unsupported`, `claims:contradicted` and `ungraded:claims`.
+export function trialTags(t: Pick<Trial, "status" | "verdicts" | "steps" | "expectedTools" | "claims">): Set<string> {
   const tags = new Set<string>();
   if (t.status === "errored") return tags;
+  for (const tag of claimTags(t.claims)) tags.add(tag);
   for (const v of t.verdicts) {
     if (v.ungraded) tags.add(`ungraded:${v.grader}`);
     else if (!v.pass) {
@@ -141,9 +144,26 @@ export function trialTags(t: Pick<Trial, "status" | "verdicts" | "steps" | "expe
   return tags;
 }
 
+function claimTags(claims: ClaimCheck | null): string[] {
+  if (claims === null) return [];
+  if (claims.status === "ungraded") return ["ungraded:claims"];
+  const labels = new Set(claims.claims.map((c) => c.label));
+  return [
+    ...(labels.has("unsupported") || labels.has("contradicted") ? ["claims:flagged"] : []),
+    ...(labels.has("unsupported") ? ["claims:unsupported"] : []),
+    ...(labels.has("contradicted") ? ["claims:contradicted"] : []),
+  ];
+}
+
 // A tag in words, for "showing the tries that …".
 export function describeTag(tag: string): string {
   if (tag === "policy-violation") return "broke a policy rule";
+  if (tag === "claims:flagged") return "have a reply with an unsupported or contradicted claim";
+  if (tag === "claims:unsupported") return "have an unsupported claim";
+  if (tag === "claims:contradicted") return "have a contradicted claim";
+  if (tag === "ungraded:claims") return "the claim checker couldn't grade";
+  if (tag === "fail:fabricated-entity") return "wrote a value never seen before (fabricated entity)";
+  if (tag === "fail:fabricated-action") return "claimed an action with no matching call (fabricated action)";
   const [kind, name] = [tag.slice(0, tag.indexOf(":")), tag.slice(tag.indexOf(":") + 1)];
   switch (kind) {
     case "fail":

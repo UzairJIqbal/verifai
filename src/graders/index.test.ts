@@ -10,7 +10,7 @@ afterAll(dispose);
 describe("grading a try", () => {
   it("returns one verdict per grader, in the reported order", () => {
     const t = scripted(seedPath, [{ customer: "Cancel 1005 please." }, { call: "cancel_order", input: { order_id: 1005 } }]);
-    expect(gradeTry(taskWith(CANCEL_REFERENCE), t, shop).map((v) => v.grader)).toEqual([...GRADERS]);
+    expect(gradeTry(taskWith(CANCEL_REFERENCE), t, shop, "").map((v) => v.grader)).toEqual([...GRADERS]);
   });
   it("lets only the outcome decide success", () => {
     const outcome = [passes("state", "ok"), passes("reply", "ok")];

@@ -36,7 +36,7 @@ const trial = (tryNumber: number, status: RecordedTrial["status"], taskId = "sta
   status,
   end: status === "errored" ? null : "answered",
   error: status === "errored" ? "timed out" : null,
-  verdicts: status === "errored" ? [] : [{ grader: "state", pass: true, reason: "nothing changed", step: null, ungraded: false }],
+  verdicts: status === "errored" ? [] : [{ grader: "state", pass: true, reason: "nothing changed", step: null, ungraded: false, spans: [] }],
   calls: 1,
   cachedCalls: 0,
   usage: { inputTokens: 100, cachedInputTokens: 0, outputTokens: 10 },
@@ -49,6 +49,7 @@ const trial = (tryNumber: number, status: RecordedTrial["status"], taskId = "sta
     { type: "customer", text: "Where is order 1005? key gsk_secretkey123" },
     { type: "text", step: 1, text: "It's processing." },
   ],
+  claims: null,
 });
 
 function runFor(split: "dev" | "holdout", id: string, smoke = false): StoredRun {
@@ -135,7 +136,7 @@ describe("the trajectory grader section", () => {
     verdicts,
     steps,
   });
-  const v = (grader: string, pass: boolean, ungraded = false) => ({ grader, pass, reason: "r", step: null, ungraded });
+  const v = (grader: string, pass: boolean, ungraded = false) => ({ grader, pass, reason: "r", step: null, ungraded, spans: [] });
   const call = (toolName: string) => ({ type: "tool-call" as const, step: 1, toolCallId: toolName, toolName, input: {} });
 
   it("counts couldn't-grade apart from passes, and per-tool precision and recall", () => {

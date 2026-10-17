@@ -623,6 +623,32 @@
           "lo": 1,
           "hi": 1
         }
+      },
+      {
+        "grader": "fabricated-entity",
+        "tasks": 35,
+        "tries": 136,
+        "graded": 136,
+        "passed": 132,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.9714285714285714,
+          "lo": 0.9142857142857143,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "fabricated-action",
+        "tasks": 35,
+        "tries": 136,
+        "graded": 136,
+        "passed": 136,
+        "ungraded": 0,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
       }
     ],
     "policy": {
@@ -781,6 +807,59 @@
         "value": 0,
         "lo": 0,
         "hi": 0
+      }
+    }
+  },
+  "hallucination": {
+    "fabricatedEntity": {
+      "tasks": 35,
+      "tries": 136,
+      "hits": 4,
+      "rate": {
+        "value": 0.02857142857142857,
+        "lo": 0,
+        "hi": 0.08571428571428572
+      }
+    },
+    "fabricatedAction": {
+      "tasks": 35,
+      "tries": 136,
+      "hits": 0,
+      "rate": {
+        "value": 0,
+        "lo": 0,
+        "hi": 0
+      }
+    },
+    "claims": {
+      "judges": [
+        "gemini-3.5-flash-lite · claims v1"
+      ],
+      "checkable": 136,
+      "checked": 136,
+      "ungraded": 0,
+      "responses": {
+        "tasks": 35,
+        "tries": 136,
+        "replies": 180,
+        "flagged": 17,
+        "rate": {
+          "value": 0.09444444444444444,
+          "lo": 0.03726625479053786,
+          "hi": 0.15816326530612246
+        }
+      },
+      "claims": {
+        "tasks": 35,
+        "tries": 136,
+        "total": 330,
+        "unsupported": 15,
+        "contradicted": 4,
+        "rate": {
+          "value": 0.045454545454545456,
+          "lo": 0.015105740181268883,
+          "hi": 0.07861635220125786
+        }
       }
     }
   }

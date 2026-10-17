@@ -16,7 +16,8 @@ export type CallFailure =
 // Groq says which limit was hit, e.g. "Limit 200000, Used 199500 … on tokens
 // per day (TPD)", and how long to wait, e.g. "Please try again in 1m2.5s".
 // Cloudflare says "you have used up your daily free allocation of 10,000 neurons".
-const DAILY = /per day|\(TPD\)|\(RPD\)|daily free allocation/i;
+// Gemini names the quota, e.g. "GenerateRequestsPerDayPerProjectPerModel-FreeTier".
+const DAILY = /per ?day|\(TPD\)|\(RPD\)|daily free allocation/i;
 const TRY_AGAIN = /try again in (?:(\d+)h)?(?:(\d+)m)?(?:([\d.]+)s)?/i;
 
 function waitHint(error: APICallError): number | null {

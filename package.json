@@ -15,6 +15,7 @@
     "noise": "tsx scripts/noise.ts",
     "compare": "tsx scripts/compare.ts",
     "regrade": "tsx scripts/regrade.ts",
+    "claims": "tsx scripts/claims.ts",
     "tasks:freeze": "tsx scripts/freeze-tasks.ts"
   },
   "dependencies": {

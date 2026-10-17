@@ -148,6 +148,7 @@ function buildTrial(args: {
     startedAt: new Date(args.startedAt).toISOString(),
     finishedAt: new Date(args.finishedAt).toISOString(),
     traceUrl: null,
+    claims: null,
     steps,
   };
 }
@@ -306,7 +307,7 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
       // Graders run outside the catch: one that throws stops the run loudly
       // rather than turning into an errored try.
       end = trajectory.end;
-      verdicts = gradeTry(task, trajectory, o.shop);
+      verdicts = gradeTry(task, trajectory, o.shop, o.setup.version.policy);
       status = outcomePassed(verdicts) ? "passed" : "failed";
     } catch (caught) {
       if (caught instanceof StopRun) throw caught;

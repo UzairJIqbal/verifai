@@ -1,19 +1,22 @@
 // `pnpm regrade [runId]`: grades a finished run's recorded tries again with
 // today's graders, and rewrites its results. No model is called: the tool
 // calls are replayed on a fresh shop to rebuild what each try changed, and a
-// replay that comes out different from the recording stops everything.
+// replay that comes out different from the recording stops everything. The
+// claim checker's labels are kept as they are; `pnpm claims` renews them.
 // With no run id, the newest finished dev run that isn't a smoke run.
 import { relative } from "node:path";
 import { styleText } from "node:util";
 import { canonical } from "../src/canonical";
 import { loadConfig, PROJECT_ROOT } from "../src/config";
 import { poolSecrets } from "../src/agent/model";
+import { loadPolicy } from "../src/agent/versions";
 import { runTool } from "../src/agent/tools";
-import { tasksHash } from "../src/eval/plan";
+import { pickFinishedRun } from "../src/eval/finished-run";
 import { makeRedactor } from "../src/eval/redact";
 import { dim, fatal, printReport } from "../src/eval/session";
-import { EVAL_STORE_PATH, EvalStore, type StoredRun } from "../src/eval/store";
+import { EVAL_STORE_PATH, EvalStore } from "../src/eval/store";
 import { langfuseSecrets } from "../src/eval/tracing";
+import { judgeSecrets } from "../src/judge/model";
 import type { Trajectory, TrajectoryEvent } from "../src/eval/trajectory";
 import { gradeTry, outcomePassed } from "../src/graders";
 import { readShopFacts } from "../src/graders/shop-facts";
@@ -21,8 +24,6 @@ import type { RecordedTrial, Step } from "../src/results/schema";
 import { writeResults } from "../src/results/write";
 import { getShopToday, openFreshShop } from "../src/shop/db";
 import { diffShops, dumpShop } from "../src/shop/diff";
-import { loadTasks } from "../src/tasks/load";
-import type { Task } from "../src/tasks/schema";
 
 const USAGE = "Usage: pnpm regrade [runId]   (run ids are the folder names under results/)";
 
@@ -58,38 +59,16 @@ function replay(trial: RecordedTrial): Trajectory {
   }
 }
 
-function pickRun(store: EvalStore, id: string | undefined): StoredRun {
-  if (id !== undefined) {
-    const run = store.getRun(id);
-    if (run === null) fatal(`There's no run ${id} in the eval store. The runs page lists them.`);
-    return run;
-  }
-  const run = store.finishedRuns().find((r) => r.config.split === "dev" && !r.config.smoke);
-  if (!run) fatal("No finished dev runs to regrade. Run `pnpm eval` first.");
-  return run;
-}
-
 function main(): void {
   const args = process.argv.slice(2);
   if (args.length > 1) fatal(USAGE);
 
   const config = loadConfig();
-  const redact = makeRedactor([...poolSecrets(config), ...langfuseSecrets()]);
+  const redact = makeRedactor([...poolSecrets(config), ...judgeSecrets(config.judge), ...langfuseSecrets()]);
   const store = new EvalStore(EVAL_STORE_PATH, redact);
   try {
-    const run = pickRun(store, args[0]);
-    if (run.config.split === "holdout") fatal(`${run.id} is a holdout run. It's graded once, by the gate, and never regraded.`);
-    if (run.config.smoke) fatal(`${run.id} is a smoke run. It checks the machinery and has no grader report; regrade a full \`pnpm eval\` run.`);
-    if (run.status !== "finished" || run.finishedAt === null) fatal(`${run.id} hasn't finished. \`pnpm eval\` carries it on.`);
-
-    const loaded = loadTasks();
-    if (loaded.version !== run.config.datasetVersion) {
-      fatal(`${run.id} was run on dataset ${run.config.datasetVersion}, and the tasks are now ${loaded.version}. It can only be regraded against the tasks it ran on.`);
-    }
-    if (tasksHash(loaded.tasks) !== run.config.tasksHash) {
-      fatal(`The dev tasks have changed since ${run.id} ran, without a new dataset version. Bump the version in evals/tasks.jsonl; this run can't be regraded.`);
-    }
-    const tasksById = new Map<string, Task>(loaded.tasks.map((t) => [t.id, t]));
+    const { run, tasksById } = pickFinishedRun(store, args[0], "regrade", "regraded");
+    const policy = loadPolicy();
 
     const seed = openFreshShop();
     const shop = readShopFacts(seed.db, getShopToday(seed.db));
@@ -109,7 +88,7 @@ function main(): void {
       }
       const task = tasksById.get(trial.taskId);
       if (!task) throw new Error(`${run.id} has tries of ${trial.taskId}, which isn't a dev task.`);
-      const verdicts = gradeTry(task, replay(trial), shop);
+      const verdicts = gradeTry(task, replay(trial), shop, policy);
       const status = outcomePassed(verdicts) ? ("passed" as const) : ("failed" as const);
       if (status !== trial.status) changed++;
       return [{ taskId: trial.taskId, tryNumber: trial.tryNumber, status, verdicts }];

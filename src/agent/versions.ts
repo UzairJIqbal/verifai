@@ -15,6 +15,9 @@ export type AgentVersion = {
   // What the agent reports as its version, e.g. "prompt v1 · tools v1".
   label: string;
   systemPrompt: string;
+  // The policy as it appears in the prompt. The hallucination checks count
+  // what's written in it as known.
+  policy: string;
   toolDescriptions: Record<ToolName, string>;
 };
 
@@ -27,9 +30,11 @@ function readAgentFile(...parts: string[]): string {
   }
 }
 
+export const loadPolicy = (): string => readAgentFile("policy.md").trim();
+
 export function loadAgentVersion(config: Config, today: string): AgentVersion {
   const template = readAgentFile("prompts", `${config.promptVersion}.md`);
-  const policy = readAgentFile("policy.md").trim();
+  const policy = loadPolicy();
   for (const placeholder of ["{{today}}", "{{policy}}"]) {
     if (!template.includes(placeholder)) {
       throw new Error(`agent/prompts/${config.promptVersion}.md is missing the ${placeholder} placeholder.`);
@@ -54,6 +59,7 @@ export function loadAgentVersion(config: Config, today: string): AgentVersion {
     toolDescriptionsVersion: config.toolDescriptionsVersion,
     label: `prompt ${config.promptVersion} · tools ${config.toolDescriptionsVersion}`,
     systemPrompt,
+    policy,
     toolDescriptions: parsed.data,
   };
 }

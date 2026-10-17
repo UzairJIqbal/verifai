@@ -69,6 +69,29 @@ const poolMember = z.strictObject({
 });
 export type PoolMember = z.infer<typeof poolMember>;
 
+// Who can be the judge. Only Gemini, so the judge never shares a free limit
+// with the agent.
+export const JUDGE_PROVIDERS = ["gemini"] as const;
+export const THINKING_LEVELS = ["minimal", "low", "medium", "high"] as const;
+
+const judgeSchema = z.strictObject({
+  provider: z.enum(JUDGE_PROVIDERS),
+  model: z.string().min(1),
+  temperature: z.number().min(0).max(2),
+  // How long Gemini thinks before answering.
+  thinkingLevel: z.enum(THINKING_LEVELS),
+  // Longest wait for one call before giving up on that try.
+  stepTimeoutSeconds: z.number().positive(),
+  // agent/… holds the agent's words; judges/claims/<version>.md the claim checker's.
+  claimsPromptVersion: versionName,
+  freeTierLimits: z.strictObject({
+    checked: z.string().min(1),
+    requestsPerMinute: z.number().int().positive(),
+    requestsPerDay: z.number().int().positive(),
+  }),
+});
+export type JudgeConfig = z.infer<typeof judgeSchema>;
+
 export const configSchema = z.strictObject({
   agent: z
     .strictObject({
@@ -109,6 +132,7 @@ export const configSchema = z.strictObject({
   }),
   promptVersion: versionName,
   toolDescriptionsVersion: versionName,
+  judge: judgeSchema,
 });
 export type Config = z.infer<typeof configSchema>;
 

@@ -5,12 +5,12 @@ import { flipped, interval, pct } from "@/src/stats/format";
 import type { Estimate } from "@/src/stats/stats";
 import { linkClass, trialsHref } from "./run-stats";
 
-const cell = "px-3 py-1.5 align-top whitespace-nowrap";
+export const cell = "px-3 py-1.5 align-top whitespace-nowrap";
 const head = `${cell} font-normal`;
-const num = `${cell} text-right font-mono`;
+export const num = `${cell} text-right font-mono`;
 
 // A count that opens the tries behind it; zero has no tries to open.
-function Count({ value, of, href }: { value: number; of?: number; href: string | null }) {
+export function Count({ value, of, href }: { value: number; of?: number; href: string | null }) {
   const text = of === undefined ? String(value) : `${value}/${of}`;
   if (href === null || value === 0) return <span className={value === 0 ? "text-muted-foreground" : ""}>{text}</span>;
   return (
@@ -20,7 +20,7 @@ function Count({ value, of, href }: { value: number; of?: number; href: string |
   );
 }
 
-function Rate({ e, href }: { e: Estimate | null; href: string | null }) {
+export function Rate({ e, href }: { e: Estimate | null; href: string | null }) {
   if (e === null) return <span className="text-muted-foreground">–</span>;
   const body = (
     <>
@@ -43,7 +43,7 @@ function Mean({ e }: { e: Estimate | null }) {
   );
 }
 
-function Table({ title, note, header, children }: { title: string; note: string; header: string[]; children: ReactNode }) {
+export function Table({ title, note, header, children }: { title: string; note: string; header: string[]; children: ReactNode }) {
   return (
     <div className="min-w-0">
       <h3 className="mb-0.5 text-[12px] font-medium">{title}</h3>
@@ -66,7 +66,7 @@ function Table({ title, note, header, children }: { title: string; note: string;
   );
 }
 
-const rowClass = "border-b last:border-b-0 hover:bg-muted/60";
+export const rowClass = "border-b last:border-b-0 hover:bg-muted/60";
 
 /**
  * How the tries got to their results: every grader's pass rate, policy

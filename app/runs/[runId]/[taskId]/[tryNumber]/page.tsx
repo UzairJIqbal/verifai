@@ -4,11 +4,13 @@ import { notFound } from "next/navigation";
 import { PageHeading } from "@/components/shell/empty-state";
 import { formatMs, TranscriptRow } from "@/components/playground/transcript";
 import { countedTokens, formatCount, STATUS_CLASS } from "@/components/runs/format";
+import { ClaimNote, ClaimsLine } from "@/components/runs/claims";
 import { HoldoutLock } from "@/components/runs/holdout-lock";
 import { LoadError } from "@/components/runs/load-error";
 import { stepsToItems, verdictsByItem } from "@/components/runs/trajectory";
 import { VerdictNote, VerdictSummary } from "@/components/runs/verdicts";
 import { readRun, type RunFiles } from "@/src/results/read";
+import type { Claim } from "@/src/results/schema";
 
 type Params = { runId: string; taskId: string; tryNumber: string };
 
@@ -62,6 +64,11 @@ function Trajectory({ runId, taskId, tryNumber }: Params) {
   if (!trial) notFound();
   const items = stepsToItems(trial.steps);
   const byItem = verdictsByItem(items, trial.verdicts);
+  // Fabricated values by the step they were written in; a tool call's step is its row.
+  const spansAt = new Map<string, string[]>();
+  for (const v of trial.verdicts) for (const s of v.spans) spansAt.set(String(s.step), [...(spansAt.get(String(s.step)) ?? []), s.text]);
+  const claimsAt = new Map<string, Claim[]>();
+  if (trial.claims?.status === "checked") for (const c of trial.claims.claims) claimsAt.set(String(c.step), [...(claimsAt.get(String(c.step)) ?? []), c]);
 
   return (
     <>
@@ -86,6 +93,10 @@ function Trajectory({ runId, taskId, tryNumber }: Params) {
           {trial.usage.cachedInputTokens > 0 && ` (${formatCount(trial.usage.cachedInputTokens)} cached)`} ·{" "}
           {formatCount(trial.usage.outputTokens)} out · {formatCount(countedTokens(trial.usage))} counted · {formatMs(trial.modelLatencyMs)} waiting on the
           model · ${trial.costUsd.toFixed(4)}
+        </dd>
+        <dt className="text-muted-foreground">Claims</dt>
+        <dd>
+          <ClaimsLine claims={trial.claims} runId={runId} errored={trial.status === "errored"} />
         </dd>
         <dt className="text-muted-foreground">Trace</dt>
         <dd>
@@ -113,7 +124,17 @@ function Trajectory({ runId, taskId, tryNumber }: Params) {
               marks={{
                 at: Number(item.id),
                 failing: (byItem.get(item.id) ?? []).some((v) => !v.pass),
-                notes: (byItem.get(item.id) ?? []).map((v) => <VerdictNote key={v.grader} v={v} />),
+                highlight: spansAt.get(item.id),
+                notes: (
+                  <>
+                    {(byItem.get(item.id) ?? []).map((v) => (
+                      <VerdictNote key={v.grader} v={v} />
+                    ))}
+                    {(claimsAt.get(item.id) ?? []).map((c, i) => (
+                      <ClaimNote key={i} c={c} />
+                    ))}
+                  </>
+                ),
               }}
             />
           ))}

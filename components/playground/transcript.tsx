@@ -29,7 +29,30 @@ export const formatMs = (ms: number) => (ms < 1000 ? `${ms} ms` : `${(ms / 1000)
 // row in as it arrives; a recorded try is still, since nothing new arrives.
 // A recorded try's row can carry what the graders said about it: `at` is its
 // place in the try (#N, as grader reasons cite it), `failing` marks it red.
-export type RowMarks = { at?: number; failing?: boolean; notes?: ReactNode };
+// `highlight` is the values in it a check flagged (a fabricated order number,
+// say): marked wherever they appear in the reply or the tool's input.
+export type RowMarks = { at?: number; failing?: boolean; notes?: ReactNode; highlight?: string[] };
+
+// The text with every flagged value marked, longest first so "Rs 1,200"
+// wins over "1,200".
+function Highlighted({ text, values }: { text: string; values?: string[] }) {
+  const wanted = [...new Set(values ?? [])].filter((v) => v.length > 0).sort((a, b) => b.length - a.length);
+  if (wanted.length === 0) return <>{text}</>;
+  const pattern = new RegExp(`(${wanted.map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})`, "g");
+  return (
+    <>
+      {text.split(pattern).map((part, i) =>
+        i % 2 === 1 ? (
+          <mark key={i} className="rounded-sm bg-fail/15 px-0.5 text-fail" title="Never seen before it was written">
+            {part}
+          </mark>
+        ) : (
+          part
+        ),
+      )}
+    </>
+  );
+}
 
 function Row({
   who,
@@ -71,9 +94,13 @@ function Row({
 
 // Objects show one key per line, values as compact JSON, so an order reads
 // as a short table instead of one long line.
-function JsonFields({ value }: { value: unknown }) {
+function JsonFields({ value, highlight }: { value: unknown; highlight?: string[] }) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return <code className="block wrap-anywhere">{JSON.stringify(value)}</code>;
+    return (
+      <code className="block wrap-anywhere">
+        <Highlighted text={JSON.stringify(value)} values={highlight} />
+      </code>
+    );
   }
   const entries = Object.entries(value);
   if (entries.length === 0) return <code className="text-muted-foreground">{"{}"}</code>;
@@ -82,14 +109,16 @@ function JsonFields({ value }: { value: unknown }) {
       {entries.map(([key, v]) => (
         <div key={key} className="contents">
           <dt className="text-muted-foreground">{key}</dt>
-          <dd className="wrap-anywhere">{JSON.stringify(v)}</dd>
+          <dd className="wrap-anywhere">
+            <Highlighted text={JSON.stringify(v)} values={highlight} />
+          </dd>
         </div>
       ))}
     </dl>
   );
 }
 
-function ToolCard({ item }: { item: Extract<TranscriptItem, { kind: "tool" }> }) {
+function ToolCard({ item, highlight }: { item: Extract<TranscriptItem, { kind: "tool" }>; highlight?: string[] }) {
   const { outcome } = item;
   return (
     <div className="rounded-md border bg-card">
@@ -108,7 +137,7 @@ function ToolCard({ item }: { item: Extract<TranscriptItem, { kind: "tool" }> })
       </div>
       <div className="grid gap-1.5 px-2.5 py-1.5 sm:grid-cols-[3.5rem_minmax(0,1fr)] sm:gap-x-2">
         <div className="text-[11px] leading-[18px] text-muted-foreground">input</div>
-        <JsonFields value={item.input} />
+        <JsonFields value={item.input} highlight={highlight} />
         {outcome !== undefined && (
           <>
             <div className="text-[11px] leading-[18px] text-muted-foreground">result</div>
@@ -135,13 +164,15 @@ export function TranscriptRow({ item, still = false, marks }: { item: Transcript
     case "agent":
       return (
         <Row who="agent" step={item.step} still={still} marks={marks}>
-          <p className="whitespace-pre-wrap wrap-anywhere">{item.text}</p>
+          <p className="whitespace-pre-wrap wrap-anywhere">
+            <Highlighted text={item.text} values={marks?.highlight} />
+          </p>
         </Row>
       );
     case "tool":
       return (
         <Row who="tool" step={item.step} still={still} marks={marks}>
-          <ToolCard item={item} />
+          <ToolCard item={item} highlight={marks?.highlight} />
         </Row>
       );
     case "call":

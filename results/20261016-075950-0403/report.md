@@ -43,6 +43,8 @@ How each try got to its result, reported beside the success rate and never part 
 | policy:no-false-promises | 35 | 136 | 0/136 | 0 | 100.0% (100.0–100.0) |
 | efficiency | 35 | 136 | 0/136 | 0 | 100.0% (100.0–100.0) |
 | loop | 35 | 136 | 0/136 | 0 | 100.0% (100.0–100.0) |
+| fabricated-entity | 35 | 136 | 4/136 | 0 | 97.1% (91.4–100.0) |
+| fabricated-action | 35 | 136 | 0/136 | 0 | 100.0% (100.0–100.0) |
 
 ### Policy: violation rate, overall and per rule
 
@@ -77,6 +79,22 @@ How each try got to its result, reported beside the success rate and never part 
 | tool calls per try | 35 | 136 | 2.18 (1.95–2.39) |
 | reference calls per try | 35 | 136 | 2.71 (2.46–3.03) |
 | loop rate | 35 | 136 | 0.0% (0.0–0.0) · 0 tries looped |
+
+## Hallucination
+
+Rates are averaged over tasks with 95% intervals; the reply and claim rates pool each task's replies or claims first. Claims read by gemini-3.5-flash-lite · claims v1: 136 of 136 tries checked.
+
+|  | tasks | tries | count | rate |
+| --- | --- | --- | --- | --- |
+| fabricated entity | 35 | 136 | 4/136 tries | 2.9% (0.0–8.6) |
+| fabricated action | 35 | 136 | 0/136 tries | 0.0% (0.0–0.0) |
+| replies with a bad claim | 35 | 136 | 17/180 replies | 9.4% (3.7–15.8) |
+| unsupported claims | 35 | 136 | 15/330 claims (4 contradicted) | 4.5% (1.5–7.9) |
+
+- **Fabricated entity:** Tries where the agent wrote an order number, customer id, email, amount or date (in a reply or a tool input) that no tool result, customer message or the policy had shown before it. Checked by code on every try.
+- **Fabricated action:** Tries where a reply says an action was done (refunded, cancelled, address changed, passed to a person) with no successful call of the tool that does it. Checked by code on every try.
+- **Replies with a bad claim:** Agent replies with at least one claim the judge labelled unsupported or contradicted, over every reply in the tries it read.
+- **Unsupported claims:** Claims labelled unsupported (nothing in the evidence states it or lets you work it out), over every claim the judge split the replies into. Contradicted claims are counted beside it, not in it.
 
 Model calls: 481 (0 replayed from the cache; 142 from cloudflare, 339 from groq) · tokens in 569847 (323328 cached) · out 24942 · cost $0.1062 at list price
 

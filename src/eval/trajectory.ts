@@ -22,5 +22,8 @@ export type Trajectory = {
 // `step` is the index of the event the verdict is about (the same index as the
 // try's recorded steps), or null when it's about the try as a whole. An
 // ungraded verdict couldn't run on this try (missing data): it never passes,
-// and it's counted apart from passes and fails.
-export type Verdict = { grader: string; pass: boolean; reason: string; step: number | null; ungraded: boolean };
+// and it's counted apart from passes and fails. `spans` are the exact pieces
+// of text a verdict is about (a made-up order number, "I've refunded"), each
+// at the step it was written in, so the trajectory page can highlight them.
+export type ValueSpan = { step: number; text: string };
+export type Verdict = { grader: string; pass: boolean; reason: string; step: number | null; ungraded: boolean; spans?: ValueSpan[] };

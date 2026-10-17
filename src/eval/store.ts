@@ -7,7 +7,7 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { z } from "zod";
 import { PROJECT_ROOT, REASONING_EFFORTS } from "../config";
 import { SPLITS } from "../tasks/schema";
-import { stepSchema, TRIAL_STATUSES, recordedTrialSchema, verdictSchema, type RecordedTrial } from "../results/schema";
+import { claimCheckSchema, stepSchema, TRIAL_STATUSES, recordedTrialSchema, verdictSchema, type ClaimCheck, type RecordedTrial } from "../results/schema";
 import type { Redact } from "./redact";
 import type { Verdict } from "./trajectory";
 
@@ -76,6 +76,7 @@ const trialRowSchema = z.object({
   started_at: z.string(),
   finished_at: z.string(),
   trace_url: z.string().nullable(),
+  claims_json: z.string().nullable(),
 });
 
 const SCHEMA = `
@@ -105,6 +106,7 @@ CREATE TABLE IF NOT EXISTS trials (
   started_at TEXT NOT NULL,
   finished_at TEXT NOT NULL,
   trace_url TEXT,
+  claims_json TEXT,
   PRIMARY KEY (run_id, task_id, try)
 );
 CREATE TABLE IF NOT EXISTS steps (
@@ -125,6 +127,7 @@ CREATE TABLE IF NOT EXISTS grades (
   reason TEXT NOT NULL,
   step INTEGER,
   ungraded INTEGER NOT NULL DEFAULT 0,
+  spans_json TEXT NOT NULL DEFAULT '[]',
   PRIMARY KEY (run_id, task_id, try, grader)
 );
 CREATE TABLE IF NOT EXISTS cache (
@@ -178,12 +181,16 @@ export class EvalStore {
   }
 
   // Stores made before verdicts pointed at a step: add the columns. Their old
-  // grades keep a null step and count as graded, which they were.
+  // grades keep a null step and count as graded, which they were. Stores from
+  // before the hallucination checks get no spans and no claims yet.
   private migrate(): void {
-    const columns = z.array(z.object({ name: z.string() })).parse(this.db.prepare("PRAGMA table_info(grades)").all());
-    const has = new Set(columns.map((c) => c.name));
-    if (!has.has("step")) this.db.exec("ALTER TABLE grades ADD COLUMN step INTEGER");
-    if (!has.has("ungraded")) this.db.exec("ALTER TABLE grades ADD COLUMN ungraded INTEGER NOT NULL DEFAULT 0");
+    const columnsOf = (table: string) =>
+      new Set(z.array(z.object({ name: z.string() })).parse(this.db.prepare(`PRAGMA table_info(${table})`).all()).map((c) => c.name));
+    const grades = columnsOf("grades");
+    if (!grades.has("step")) this.db.exec("ALTER TABLE grades ADD COLUMN step INTEGER");
+    if (!grades.has("ungraded")) this.db.exec("ALTER TABLE grades ADD COLUMN ungraded INTEGER NOT NULL DEFAULT 0");
+    if (!grades.has("spans_json")) this.db.exec("ALTER TABLE grades ADD COLUMN spans_json TEXT NOT NULL DEFAULT '[]'");
+    if (!columnsOf("trials").has("claims_json")) this.db.exec("ALTER TABLE trials ADD COLUMN claims_json TEXT");
   }
 
   close(): void {
@@ -277,8 +284,8 @@ export class EvalStore {
       this.db
         .prepare(
           `INSERT INTO trials (run_id, task_id, try, category, status, end_reason, error, calls, cached_calls,
-             input_tokens, cached_input_tokens, output_tokens, cost_usd, model_latency_ms, started_at, finished_at, trace_url)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             input_tokens, cached_input_tokens, output_tokens, cost_usd, model_latency_ms, started_at, finished_at, trace_url, claims_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           runId,
@@ -298,6 +305,7 @@ export class EvalStore {
           trial.startedAt,
           trial.finishedAt,
           trial.traceUrl,
+          trial.claims === null ? null : this.json(trial.claims),
         );
       const step = this.db.prepare("INSERT INTO steps (run_id, task_id, try, seq, type, payload_json) VALUES (?, ?, ?, ?, ?, ?)");
       trial.steps.forEach((s, seq) => step.run(runId, trial.taskId, trial.tryNumber, seq, s.type, this.json(s)));
@@ -306,8 +314,8 @@ export class EvalStore {
   }
 
   private insertGrades(runId: string, taskId: string, tryNumber: number, verdicts: Verdict[]): void {
-    const grade = this.db.prepare("INSERT INTO grades (run_id, task_id, try, grader, pass, reason, step, ungraded) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
-    for (const v of verdicts) grade.run(runId, taskId, tryNumber, v.grader, v.pass ? 1 : 0, this.redact(v.reason), v.step, v.ungraded ? 1 : 0);
+    const grade = this.db.prepare("INSERT INTO grades (run_id, task_id, try, grader, pass, reason, step, ungraded, spans_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    for (const v of verdicts) grade.run(runId, taskId, tryNumber, v.grader, v.pass ? 1 : 0, this.redact(v.reason), v.step, v.ungraded ? 1 : 0, this.json(v.spans ?? []));
   }
 
   // Regrading: every try's grades and status replaced at once, or none.
@@ -323,12 +331,22 @@ export class EvalStore {
     });
   }
 
+  // The claim checker's labels for some tries of a run, all at once or none.
+  saveClaims(runId: string, checks: { taskId: string; tryNumber: number; claims: ClaimCheck }[]): void {
+    this.transaction(() => {
+      const save = this.db.prepare("UPDATE trials SET claims_json = ? WHERE run_id = ? AND task_id = ? AND try = ?");
+      for (const c of checks) {
+        if (save.run(this.json(c.claims), runId, c.taskId, c.tryNumber).changes !== 1) throw new Error(`Run ${runId} has no try ${c.taskId}#${c.tryNumber} to save claims for.`);
+      }
+    });
+  }
+
   loadTrials(runId: string): RecordedTrial[] {
     const rows = this.db.prepare("SELECT * FROM trials WHERE run_id = ? ORDER BY task_id, try").all(runId).map((r) => trialRowSchema.parse(r));
     const stepsOf = this.db.prepare("SELECT payload_json FROM steps WHERE run_id = ? AND task_id = ? AND try = ? ORDER BY seq");
-    const gradesOf = this.db.prepare("SELECT grader, pass, reason, step, ungraded FROM grades WHERE run_id = ? AND task_id = ? AND try = ? ORDER BY rowid");
+    const gradesOf = this.db.prepare("SELECT grader, pass, reason, step, ungraded, spans_json FROM grades WHERE run_id = ? AND task_id = ? AND try = ? ORDER BY rowid");
     const payloads = z.array(z.object({ payload_json: z.string() }));
-    const grades = z.array(z.object({ grader: z.string(), pass: z.number(), reason: z.string(), step: z.number().nullable(), ungraded: z.number() }));
+    const grades = z.array(z.object({ grader: z.string(), pass: z.number(), reason: z.string(), step: z.number().nullable(), ungraded: z.number(), spans_json: z.string() }));
     return rows.map((r) => {
       const args: SQLInputValue[] = [runId, r.task_id, r.try];
       return recordedTrialSchema.parse({
@@ -338,7 +356,7 @@ export class EvalStore {
         status: r.status,
         end: r.end_reason,
         error: r.error,
-        verdicts: grades.parse(gradesOf.all(...args)).map((g) => verdictSchema.parse({ grader: g.grader, pass: g.pass === 1, reason: g.reason, step: g.step, ungraded: g.ungraded === 1 })),
+        verdicts: grades.parse(gradesOf.all(...args)).map((g) => verdictSchema.parse({ grader: g.grader, pass: g.pass === 1, reason: g.reason, step: g.step, ungraded: g.ungraded === 1, spans: JSON.parse(g.spans_json) })),
         calls: r.calls,
         cachedCalls: r.cached_calls,
         usage: { inputTokens: r.input_tokens, cachedInputTokens: r.cached_input_tokens, outputTokens: r.output_tokens },
@@ -348,6 +366,7 @@ export class EvalStore {
         finishedAt: r.finished_at,
         traceUrl: r.trace_url,
         steps: payloads.parse(stepsOf.all(...args)).map((p) => stepSchema.parse(JSON.parse(p.payload_json))),
+        claims: r.claims_json === null ? null : claimCheckSchema.parse(JSON.parse(r.claims_json)),
       });
     });
   }
@@ -398,15 +417,19 @@ export class EvalStore {
     return row.n >= 10 ? row.average : null;
   }
 
-  // Every provider's calls together: the pool is one model, so a call is
-  // much the same size whichever answers it.
-  averageUsagePerCall(): ProviderUsage | null {
+  // The agent pool's providers together: the pool is one model, so a call is
+  // much the same size whichever answers it. The judge's calls are a
+  // different size and are left out by not naming its provider.
+  averageUsagePerCall(providers: string[]): ProviderUsage | null {
     const row = z
       .object({ n: z.number(), input: z.number().nullable(), cached: z.number().nullable(), output: z.number().nullable() })
       .parse(
         this.db
-          .prepare("SELECT COUNT(*) AS n, AVG(input_tokens) AS input, AVG(cached_input_tokens) AS cached, AVG(output_tokens) AS output FROM provider_calls")
-          .get(),
+          .prepare(
+            `SELECT COUNT(*) AS n, AVG(input_tokens) AS input, AVG(cached_input_tokens) AS cached, AVG(output_tokens) AS output
+             FROM provider_calls WHERE provider IN (SELECT value FROM json_each(?))`,
+          )
+          .get(JSON.stringify(providers)),
       );
     if (row.n < 20) return null;
     return { calls: 1, inputTokens: row.input ?? 0, cachedInputTokens: row.cached ?? 0, outputTokens: row.output ?? 0 };

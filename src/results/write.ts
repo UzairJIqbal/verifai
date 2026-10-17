@@ -12,6 +12,8 @@ import { expectedTools } from "../graders/tool-choice";
 import { POLICY_RULES } from "../graders/policy";
 import { outcomeRow, runStats, type RunStats, type Slice } from "../stats/report";
 import { graderReport } from "../stats/graders";
+import { hallucinationReport } from "../stats/hallucination";
+import { claimCoverage, HALLUCINATION_DEFINITIONS, hallucinationTable } from "./hallucination-text";
 import { flipped, pct, sampleSize, withInterval } from "../stats/format";
 import type { Estimate } from "../stats/stats";
 import {
@@ -96,6 +98,7 @@ export function buildReport(run: StoredRun, trials: Trial[], finishedAt: string,
           tools: TOOL_NAMES,
           referenceLength: new Map([...tasks].map(([id, task]) => [id, task.reference.length])),
         }),
+    hallucination: c.smoke ? null : hallucinationReport(trials),
   });
 }
 
@@ -203,6 +206,26 @@ export function renderMarkdown(report: Report, trials: Trial[]): string {
         ]),
       ]
     : [];
+  const hallucination = report.hallucination
+    ? (() => {
+        const { header, rows } = hallucinationTable(report.hallucination);
+        return [
+          "",
+          "## Hallucination",
+          "",
+          `Rates are averaged over tasks with 95% intervals; the reply and claim rates pool each task's replies or claims first. ${claimCoverage(report.hallucination)}`,
+          "",
+          `| ${header.join(" | ")} |`,
+          `| ${header.map(() => "---").join(" | ")} |`,
+          ...rows.map((r) => `| ${r.join(" | ")} |`),
+          "",
+          `- **Fabricated entity:** ${HALLUCINATION_DEFINITIONS.fabricatedEntity}`,
+          `- **Fabricated action:** ${HALLUCINATION_DEFINITIONS.fabricatedAction}`,
+          `- **Replies with a bad claim:** ${HALLUCINATION_DEFINITIONS.responses}`,
+          `- **Unsupported claims:** ${HALLUCINATION_DEFINITIONS.claims}`,
+        ];
+      })()
+    : [];
   const lines = [
     `# ${report.smoke ? "Smoke run" : "Run"} ${report.runId}`,
     "",
@@ -214,6 +237,7 @@ export function renderMarkdown(report: Report, trials: Trial[]): string {
     "",
     ...outcome,
     ...graders,
+    ...hallucination,
     "",
     `Model calls: ${t.calls} (${t.cachedCalls} replayed from the cache; ${Object.entries(t.callsByProvider).map(([p, n]) => `${n} from ${p}`).join(", ") || "none"}) · tokens in ${t.usage.inputTokens} (${t.usage.cachedInputTokens} cached) · out ${t.usage.outputTokens} · cost $${t.costUsd.toFixed(4)} at list price`,
     "",
