@@ -1,0 +1,5 @@
+{
+  "minKappa": 0.6,
+  "reason": "κ of 0.6 is where agreement between two raters is usually called substantial rather than moderate. Below it, the judge disagrees with a careful human often enough that a pass rate it reports could move by more than the changes the loop is trying to measure, so its numbers couldn't be trusted to tell a fix from noise. It applies to each judge's pooled row on judge-test, not to the judge-dev labels it was tuned on.",
+  "decidedAt": "2026-10-18"
+}

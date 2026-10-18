@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   agreement,
+  agreementEstimate,
   bootstrapMean,
   bootstrapRatio,
   comb,
@@ -241,6 +242,48 @@ describe("agreement", () => {
   it("leaves κ undefined when both always gave the same answer", () => {
     expect(agreement([{ truth: true, predicted: true }]).kappa).toBeNaN();
     expect(agreement([{ truth: true, predicted: true }]).tnr).toBeNaN();
+  });
+});
+
+describe("agreementEstimate", () => {
+  const item = (truth: boolean, predicted: boolean) => ({ truth, predicted });
+  const groups = [
+    [item(true, true), item(false, false), item(false, false)],
+    [item(true, false), item(false, false)],
+    [item(true, true), item(false, true), item(false, false)],
+    [item(false, false), item(false, false)],
+    [item(true, true), item(true, true)],
+  ];
+
+  it("has the same point values as agreement() on every item", () => {
+    const e = agreementEstimate(groups);
+    const a = agreement(groups.flat());
+    expect(e.kappa).toBe(a.kappa);
+    expect(e.kappaEstimate.value).toBe(a.kappa);
+    expect(e.tprEstimate.value).toBe(a.tpr);
+    expect(e.tnrEstimate.value).toBe(a.tnr);
+  });
+
+  it("gives the same intervals for the same input, around the point", () => {
+    const e = agreementEstimate(groups);
+    expect(agreementEstimate(groups)).toEqual(e);
+    for (const x of [e.kappaEstimate, e.tprEstimate, e.tnrEstimate]) {
+      expect(x.lo).toBeLessThanOrEqual(x.value);
+      expect(x.hi).toBeGreaterThanOrEqual(x.value);
+    }
+  });
+
+  it("has no width when every task agrees perfectly", () => {
+    const e = agreementEstimate([[item(true, true), item(false, false)], [item(true, true), item(false, false)]]);
+    expect(e.kappaEstimate).toEqual({ value: 1, lo: 1, hi: 1 });
+  });
+
+  it("leaves κ undefined, interval too, when there's only one answer", () => {
+    const e = agreementEstimate([[item(false, false)], [item(false, false)]]);
+    expect(e.kappaEstimate.value).toBeNaN();
+    expect(e.kappaEstimate.lo).toBeNaN();
+    expect(e.tprEstimate.value).toBeNaN();
+    expect(e.tnrEstimate.value).toBe(1);
   });
 });
 

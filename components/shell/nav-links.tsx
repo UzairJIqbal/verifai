@@ -11,6 +11,7 @@ const PLACES = [
   { href: "/tasks", label: "Tasks", localOnly: false },
   { href: "/runs", label: "Runs", localOnly: false },
   { href: "/compare", label: "Compare", localOnly: false },
+  { href: "/labelling", label: "Labelling", localOnly: true },
 ] as const;
 
 export function NavLinks({ showLocalOnly }: { showLocalOnly: boolean }) {

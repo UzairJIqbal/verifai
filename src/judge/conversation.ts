@@ -10,9 +10,8 @@ export type ConversationRequest = {
   replySteps: number[];
 };
 
-// Never the shop's database or the task's expected answer: only what the
-// agent itself was given and saw.
-export function conversationRequest(steps: Step[], background: Background): ConversationRequest {
+// Each step as one numbered line, and which steps are agent replies.
+export function conversationLines(steps: Step[]): { lines: string[]; replySteps: number[] } {
   const lines: string[] = [];
   const replySteps: number[] = [];
   steps.forEach((s, i) => {
@@ -25,6 +24,13 @@ export function conversationRequest(steps: Step[], background: Background): Conv
       lines.push(`[step ${i}] AGENT REPLY: ${s.text}`);
     }
   });
+  return { lines, replySteps };
+}
+
+// Never the shop's database or the task's expected answer: only what the
+// agent itself was given and saw.
+export function conversationRequest(steps: Step[], background: Background): ConversationRequest {
+  const { lines, replySteps } = conversationLines(steps);
   const input = [`TODAY: ${background.today}`, "", "POLICY:", background.policy, "", "CONVERSATION:", ...lines].join("\n");
   return { input, replySteps };
 }

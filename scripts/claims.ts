@@ -17,6 +17,7 @@ import { langfuseSecrets } from "../src/eval/tracing";
 import { loadClaimsPrompt, type JudgeSetup } from "../src/judge/claims";
 import { connectJudge, describeJudgeError, judgeSecrets } from "../src/judge/model";
 import { callsToSend, planClaims, runClaims, type ClaimsProgress } from "../src/judge/run-claims";
+import { snapshotLabelledTrials } from "../src/labels/pick";
 import { writeResults } from "../src/results/write";
 import { getShopToday, openFreshShop } from "../src/shop/db";
 
@@ -112,6 +113,10 @@ async function main(): Promise<void> {
       if (live) process.stdout.write("\n");
     }
 
+    // The old verdicts on labelled trials are copied out before the results are
+    // rewritten, so `pnpm agreement` can still compare against them.
+    const kept = snapshotLabelledTrials(run.id, new Date());
+    if (kept > 0) console.log(dim(`  Kept ${kept} earlier verdicts on labelled trials in evals/labels/judge-verdicts.jsonl.`));
     store.saveClaims(run.id, outcome.checks);
     const written = writeResults(run, store.loadTrials(run.id), tasksById, run.finishedAt, redact);
     if (outcome.stop) {

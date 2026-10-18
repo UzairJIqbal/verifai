@@ -114,3 +114,13 @@ export function readJudgeAnswer(text: string, request: JudgeRequest, judge: Pick
   );
   return { status: "judged", ...meta, verdicts };
 }
+
+// One criterion's section of the rubric, without its heading: what the
+// labelling page shows next to that criterion, so you label by the same words.
+export function rubricSection(text: string, criterion: JudgeCriterion): string {
+  const start = text.search(new RegExp(`^## ${criterion}$`, "m"));
+  if (start === -1) return "";
+  const body = text.slice(start).replace(/^## .*\n/, "");
+  const end = body.search(/^## /m);
+  return (end === -1 ? body : body.slice(0, end)).trim();
+}

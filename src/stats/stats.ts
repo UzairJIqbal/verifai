@@ -249,3 +249,32 @@ export function agreement(items: { truth: boolean; predicted: boolean }[]): Agre
     kappa,
   };
 }
+
+export type AgreementEstimate = Agreement & { tprEstimate: Estimate; tnrEstimate: Estimate; kappaEstimate: Estimate };
+
+// Agreement with 95% intervals. Each group is one task's items (every label
+// on every try of it): items of one task aren't independent, so tasks are
+// resampled, never single items, as everywhere else. TPR and TNR are pooled
+// ratios, so their intervals are bootstrapRatio's; κ gets the same resampling
+// with agreement() run on each resample, and a resample where κ is undefined
+// (one answer only) is skipped. The caller sorts the groups by task id.
+export function agreementEstimate(groups: { truth: boolean; predicted: boolean }[][], options: { seed?: number; iterations?: number } = {}): AgreementEstimate {
+  const { seed = BOOTSTRAP_SEED, iterations = BOOTSTRAP_ITERATIONS } = options;
+  const point = agreement(groups.flat());
+  const perGroup = groups.map((g) => agreement(g));
+  const tprEstimate = bootstrapRatio(perGroup.map((a) => ({ hits: a.truePositives, chances: a.truePositives + a.falseNegatives })), { seed, iterations });
+  const tnrEstimate = bootstrapRatio(perGroup.map((a) => ({ hits: a.trueNegatives, chances: a.trueNegatives + a.falsePositives })), { seed, iterations });
+  if (Number.isNaN(point.kappa)) return { ...point, tprEstimate, tnrEstimate, kappaEstimate: { value: NaN, lo: NaN, hi: NaN } };
+  const random = seededRandom(seed);
+  const n = groups.length;
+  const kappas: number[] = [];
+  for (let i = 0; i < iterations; i++) {
+    const items: { truth: boolean; predicted: boolean }[] = [];
+    for (let j = 0; j < n; j++) items.push(...groups[Math.floor(random() * n)]);
+    const k = agreement(items).kappa;
+    if (!Number.isNaN(k)) kappas.push(k);
+  }
+  kappas.sort((a, b) => a - b);
+  const kappaEstimate = kappas.length === 0 ? { value: point.kappa, lo: NaN, hi: NaN } : { value: point.kappa, lo: quantile(kappas, 0.025), hi: quantile(kappas, 0.975) };
+  return { ...point, tprEstimate, tnrEstimate, kappaEstimate };
+}
