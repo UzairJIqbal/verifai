@@ -203,8 +203,10 @@ export const SHOP_TOOLS = {
   }),
 } satisfies Record<ToolName, ShopTool>;
 
-export function runTool(ctx: ToolContext, name: string, input: unknown): ToolOutcome {
-  const known = TOOL_NAMES.find((toolName) => toolName === name);
-  if (!known) return fail(`There is no tool called ${name}. Available tools: ${TOOL_NAMES.join(", ")}.`);
+// `offered` is the tools this agent version has. A call to one it wasn't given
+// fails like an unknown tool, so a version that drops a tool really drops it.
+export function runTool(ctx: ToolContext, name: string, input: unknown, offered: readonly ToolName[] = TOOL_NAMES): ToolOutcome {
+  const known = offered.find((toolName) => toolName === name);
+  if (!known) return fail(`There is no tool called ${name}. Available tools: ${offered.join(", ")}.`);
   return SHOP_TOOLS[known].execute(ctx, input);
 }

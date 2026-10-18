@@ -6,8 +6,17 @@ import { TOOL_NAMES, type ToolName } from "./tools";
 
 const AGENT_DIR = join(PROJECT_ROOT, "agent");
 
-// Every tool must have a description, and nothing else may be in the file.
-const toolDescriptionsSchema = z.record(z.enum(TOOL_NAMES), z.string().trim().min(1));
+// Only the shop's tools may be in the file. A tool left out isn't offered to
+// the agent at all, so a version can take one away; at least one must stay.
+const toolDescriptionsSchema = z
+  .partialRecord(z.enum(TOOL_NAMES), z.string().trim().min(1))
+  .refine((d) => Object.keys(d).length > 0, "It must describe at least one tool.");
+
+export type ToolDescriptions = Partial<Record<ToolName, string>>;
+
+// The tools a version offers, always in the shop's order so the model sees
+// the same list and the cache key doesn't change with the file's order.
+export const offeredTools = (descriptions: ToolDescriptions): ToolName[] => TOOL_NAMES.filter((name) => descriptions[name] !== undefined);
 
 export type AgentVersion = {
   promptVersion: string;
@@ -18,7 +27,7 @@ export type AgentVersion = {
   // The policy as it appears in the prompt. The hallucination checks count
   // what's written in it as known.
   policy: string;
-  toolDescriptions: Record<ToolName, string>;
+  toolDescriptions: ToolDescriptions;
 };
 
 function readAgentFile(...parts: string[]): string {
@@ -42,7 +51,18 @@ export function loadAgentVersion(config: Config, today: string): AgentVersion {
   }
   const systemPrompt = template.replaceAll("{{today}}", today).replaceAll("{{policy}}", policy);
 
-  const file = `${config.toolDescriptionsVersion}.json`;
+  return {
+    promptVersion: config.promptVersion,
+    toolDescriptionsVersion: config.toolDescriptionsVersion,
+    label: `prompt ${config.promptVersion} · tools ${config.toolDescriptionsVersion}`,
+    systemPrompt,
+    policy,
+    toolDescriptions: loadToolDescriptions(config.toolDescriptionsVersion),
+  };
+}
+
+export function loadToolDescriptions(version: string): ToolDescriptions {
+  const file = `${version}.json`;
   let raw: unknown;
   try {
     raw = JSON.parse(readAgentFile("tool-descriptions", file));
@@ -53,13 +73,5 @@ export function loadAgentVersion(config: Config, today: string): AgentVersion {
   if (!parsed.success) {
     throw new Error(`agent/tool-descriptions/${file} is invalid:\n${z.prettifyError(parsed.error)}`);
   }
-
-  return {
-    promptVersion: config.promptVersion,
-    toolDescriptionsVersion: config.toolDescriptionsVersion,
-    label: `prompt ${config.promptVersion} · tools ${config.toolDescriptionsVersion}`,
-    systemPrompt,
-    policy,
-    toolDescriptions: parsed.data,
-  };
+  return parsed.data;
 }

@@ -67,6 +67,31 @@ describe("agent loop", () => {
     expect(JSON.stringify(model.doGenerateCalls[0].prompt)).toContain("Large refunds go to a person");
   });
 
+  it("doesn't offer a tool the version leaves out, and a call to it fails", async () => {
+    const shop = openFreshShop(seedPath);
+    const today = getShopToday(shop.db);
+    const order = shop.db.prepare("SELECT id FROM orders WHERE status = 'processing' LIMIT 1").get() as { id: number };
+    const model = new MockLanguageModelV4({
+      doGenerate: [toolCall("a", "cancel_order", { order_id: order.id }), reply("Sorry, I can't cancel it.")],
+    });
+    const setup = setupWith(model, today);
+    const rest = { ...setup.version.toolDescriptions };
+    delete rest.cancel_order;
+    const events: AgentEvent[] = [];
+    await runAgentTurn({ ...setup, version: { ...setup.version, toolDescriptions: rest } }, { db: shop.db, today }, [{ role: "user", content: "Cancel it" }], (e) =>
+      events.push(e),
+    );
+    const status = shop.db.prepare("SELECT status FROM orders WHERE id = ?").get(order.id) as { status: string };
+    shop.dispose();
+
+    const offered = (model.doGenerateCalls[0].tools ?? []).map((t) => t.name);
+    expect(offered).not.toContain("cancel_order");
+    expect(offered).toContain("get_order");
+    const result = events.find((e) => e.type === "tool-result");
+    expect(result?.type === "tool-result" && !result.outcome.ok && result.outcome.error).toMatch(/no tool called cancel_order/);
+    expect(status.status).toBe("processing");
+  });
+
   it("stops at the step limit", async () => {
     const shop = openFreshShop(seedPath);
     const today = getShopToday(shop.db);

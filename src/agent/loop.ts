@@ -1,7 +1,7 @@
 import { generateText, tool, type AssistantModelMessage, type LanguageModel, type ModelMessage, type ToolResultPart, type ToolSet } from "ai";
 import { z } from "zod";
-import { runTool, SHOP_TOOLS, TOOL_NAMES, type ToolContext, type ToolName, type ToolOutcome } from "./tools";
-import type { AgentVersion } from "./versions";
+import { runTool, SHOP_TOOLS, type ToolContext, type ToolName, type ToolOutcome } from "./tools";
+import { offeredTools, type AgentVersion, type ToolDescriptions } from "./versions";
 import type { ReasoningEffort } from "../config";
 
 export type ModelUsage = { inputTokens: number; cachedInputTokens: number; outputTokens: number };
@@ -60,15 +60,19 @@ export type TurnResult = {
 
 // Tools are given to the model without an `execute`, so the SDK can only
 // describe them. Running them is the loop's job, below.
-export function buildToolSet(descriptions: Record<ToolName, string>): ToolSet {
+export function buildToolSet(descriptions: ToolDescriptions): ToolSet {
   return Object.fromEntries(
-    TOOL_NAMES.map((name) => [name, tool({ description: descriptions[name], inputSchema: SHOP_TOOLS[name].inputSchema })]),
+    offeredTools(descriptions).map((name) => [name, tool({ description: descriptions[name], inputSchema: SHOP_TOOLS[name].inputSchema })]),
   );
 }
 
 // The tools as the model sees them, in a form that can be hashed.
-export function describeTools(descriptions: Record<ToolName, string>): ToolSpec[] {
-  return TOOL_NAMES.map((name) => ({ name, description: descriptions[name], inputSchema: z.toJSONSchema(SHOP_TOOLS[name].inputSchema) }));
+export function describeTools(descriptions: ToolDescriptions): ToolSpec[] {
+  return offeredTools(descriptions).map((name) => ({
+    name,
+    description: descriptions[name] ?? "",
+    inputSchema: z.toJSONSchema(SHOP_TOOLS[name].inputSchema),
+  }));
 }
 
 /**
@@ -88,6 +92,7 @@ export async function runAgentTurn(
 ): Promise<TurnResult> {
   const tools = buildToolSet(setup.version.toolDescriptions);
   const toolSpecs = describeTools(setup.version.toolDescriptions);
+  const offered = offeredTools(setup.version.toolDescriptions);
 
   // One model call. No stopWhen, so the SDK never runs a step of its own.
   const send = async (model: LanguageModel): Promise<ModelStep> => {
@@ -141,7 +146,7 @@ export async function runAgentTurn(
       onEvent({ type: "tool-call", step, toolCallId: toolCall.toolCallId, toolName: toolCall.toolName, input: toolCall.input });
       const toolStarted = Date.now();
       const began = performance.now();
-      const outcome = runTool(ctx, toolCall.toolName, toolCall.input);
+      const outcome = runTool(ctx, toolCall.toolName, toolCall.input, offered);
       const toolLatency = Math.round(performance.now() - began);
       onEvent({
         type: "tool-result",
