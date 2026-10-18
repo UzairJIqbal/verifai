@@ -19,6 +19,7 @@
     "judge": "tsx scripts/judge.ts",
     "judge:bias": "tsx scripts/judge-bias.ts",
     "agreement": "tsx scripts/agreement.ts",
+    "taxonomy": "tsx scripts/taxonomy.ts",
     "tasks:freeze": "tsx scripts/freeze-tasks.ts"
   },
   "dependencies": {

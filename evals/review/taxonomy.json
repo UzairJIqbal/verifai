@@ -1,0 +1,40 @@
+{
+  "writtenAt": "2026-10-18",
+  "categories": [
+    {
+      "id": "confirm-not-asked",
+      "name": "Confirmation not asked as a question",
+      "definition": "Asked the customer to confirm or give a detail as a statement with no question mark, so the test customer never replied and nothing was done."
+    },
+    {
+      "id": "large-refund-itself",
+      "name": "Refunded over the limit itself",
+      "definition": "Offered or made a refund over Rs 10,000 itself instead of transferring it to a person."
+    },
+    {
+      "id": "not-their-order",
+      "name": "Acted on someone else's order",
+      "definition": "Didn't notice the order belongs to a different customer, and shared its details or acted on it."
+    },
+    {
+      "id": "said-not-done",
+      "name": "Said it acted but didn't",
+      "definition": "Told the customer it was doing or had done something, such as a transfer or a look-up, without calling the tool."
+    },
+    {
+      "id": "wrong-amount",
+      "name": "Wrong refund amount",
+      "definition": "Offered or refunded a different amount from what the customer asked for and the order allows."
+    },
+    {
+      "id": "made-up-fact",
+      "name": "Made-up fact",
+      "definition": "Stated something as fact that no tool returned and the policy doesn't say."
+    },
+    {
+      "id": "task-wrong",
+      "name": "The task or its check was wrong",
+      "definition": "The agent did the right thing; the task's expected result or its grader says otherwise, such as a correct date written with a non-breaking hyphen."
+    }
+  ]
+}
