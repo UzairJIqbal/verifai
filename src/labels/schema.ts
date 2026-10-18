@@ -12,6 +12,12 @@ const trialRef = { runId: z.string().min(1), taskId: z.string().min(1), tryNumbe
 export type TrialRef = { runId: string; taskId: string; tryNumber: number };
 export const trialKey = (t: TrialRef): string => `${t.runId}/${t.taskId}/${t.tryNumber}`;
 
+// Who labelled a trial: you on the labelling page, or a model labelling the
+// same blind export (the judges' answers stripped) when there weren't enough
+// hands. The report keeps the two apart: only "human" is ground truth.
+export const LABEL_SOURCES = ["human", "model"] as const;
+export type LabelSource = (typeof LABEL_SOURCES)[number];
+
 // One trial you labelled: one line of labels.jsonl. `criteria` is every
 // criterion the judge was asked on that trial; `claims` is every claim the
 // claim checker split its replies into, in its order, with your label.
@@ -20,6 +26,10 @@ export const trialKey = (t: TrialRef): string => `${t.runId}/${t.taskId}/${t.try
 export const labelSchema = z.object({
   ...trialRef,
   split: z.enum(JUDGE_SPLITS),
+  source: z.enum(LABEL_SOURCES),
+  // Set when a model drafted the label and a person then checked it and
+  // saved it as "human". Kept so the report can say so.
+  draftedBy: z.literal("model").optional(),
   rubricVersion: z.string().min(1),
   claimsPromptVersion: z.string().min(1),
   labelledAt: z.string().min(1),
@@ -40,6 +50,19 @@ export type JudgeSnapshot = z.infer<typeof judgeSnapshotSchema>;
 // The bar for "acceptable", written down before any tuning.
 export const barSchema = z.object({ minKappa: z.number().min(-1).max(1), reason: z.string().trim().min(1), decidedAt: z.string().min(1) });
 export type Bar = z.infer<typeof barSchema>;
+
+// The one time the split was redrawn, stratified by what the labels say, so
+// both sides hold failing tries. `seenInDev` is the judge-test tasks that
+// were on judge-dev before it: their judge verdicts had already been shown,
+// so the report names them. Written once; a second re-split is refused.
+export const resplitSchema = z.object({
+  at: z.string().min(1),
+  reason: z.string().trim().min(1),
+  strata: z.array(z.object({ name: z.string(), tasks: z.number().int().nonnegative(), dev: z.number().int().nonnegative(), test: z.number().int().nonnegative() })),
+  seenInDev: z.array(z.string()),
+  movedToDev: z.array(z.string()),
+});
+export type Resplit = z.infer<typeof resplitSchema>;
 
 export const BIAS_CHECKS = ["order", "padding"] as const;
 export type BiasCheck = (typeof BIAS_CHECKS)[number];

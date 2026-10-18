@@ -7,7 +7,7 @@ import { JUDGE_CRITERION_TEXT } from "../results/judge-text";
 import { judgeCheckLabel } from "../stats/judge";
 import { agreementEstimate, type AgreementEstimate } from "../stats/stats";
 import { claimsCheckLabel } from "./files";
-import { JUDGE_SPLITS, trialKey, type JudgeSnapshot, type JudgeSplit, type Label, type TrialRef } from "./schema";
+import { JUDGE_SPLITS, LABEL_SOURCES, trialKey, type JudgeSnapshot, type JudgeSplit, type Label, type LabelSource, type TrialRef } from "./schema";
 
 export type JudgeKind = "judge" | "claims";
 
@@ -224,3 +224,12 @@ export function agreementReport(labels: Label[], snapshots: JudgeSnapshot[], cur
 
   return { labels: { total: labels.length, bySplit }, versions, comparisons, devMistakes };
 }
+
+export type SourceReport = { source: LabelSource; report: AgreementReport };
+
+// One report per kind of labeller, never pooled. Human labels are the ground
+// truth; model labels are another model's reading of the same rubric, so
+// agreeing with them shows two models read it alike, not that the judge is
+// right. Mixing them would let 93 model labels pass for human evidence.
+export const reportsBySource = (labels: Label[], snapshots: JudgeSnapshot[], current: { judge: string; claims: string }): SourceReport[] =>
+  LABEL_SOURCES.map((source) => ({ source, report: agreementReport(labels.filter((l) => l.source === source), snapshots, current) }));

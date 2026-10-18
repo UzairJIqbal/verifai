@@ -37,6 +37,7 @@ export function saveLabel(body: SaveLabelRequest, now: Date, files: LabelFiles =
     taskId: next.taskId,
     tryNumber: next.tryNumber,
     split,
+    source: "human",
     rubricVersion: judge.rubricVersion,
     claimsPromptVersion: claims.promptVersion,
     labelledAt: now.toISOString(),

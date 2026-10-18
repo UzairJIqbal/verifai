@@ -28,7 +28,7 @@ describe("bias variants", () => {
   });
 
   it("pads only trials labelled as passing everything", () => {
-    const base = { runId: "r", taskId: "t", tryNumber: 1, split: "judge-dev" as const, rubricVersion: "v", claimsPromptVersion: "v", labelledAt: "x", claims: [] };
+    const base = { runId: "r", taskId: "t", tryNumber: 1, split: "judge-dev" as const, source: "human" as const, rubricVersion: "v", claimsPromptVersion: "v", labelledAt: "x", claims: [] };
     expect(paddingEligible({ ...base, criteria: [{ criterion: "tone", pass: true }] })).toBe(true);
     expect(paddingEligible({ ...base, criteria: [{ criterion: "tone", pass: false }] })).toBe(false);
     expect(paddingEligible({ ...base, criteria: [] })).toBe(false);

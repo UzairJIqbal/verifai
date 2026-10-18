@@ -17,7 +17,7 @@ export const PADDING =
 
 export const BIAS_DESCRIPTIONS: Record<BiasCheck, string> = {
   order: "The conversation shown before the policy and the date, and the criteria asked in reverse order.",
-  padding: "Trials you labelled as passing every criterion, with harmless closing sentences added to the agent's last reply.",
+  padding: "Trials labelled (by a person or the model) as passing every criterion, with harmless closing sentences added to the agent's last reply.",
 };
 
 export function orderSwappedRequest(steps: Step[], background: Background, criteria: JudgeCriterion[]): JudgeRequest {

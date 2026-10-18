@@ -3,11 +3,23 @@
 // `pnpm agreement`; never edited by hand.
 import { pct } from "../stats/format";
 import type { Estimate } from "../stats/stats";
-import type { AgreementReport, AgreementRow, JudgeKind, SplitAgreement, VersionAgreement } from "./agreement";
+import type { AgreementRow, JudgeKind, SourceReport, SplitAgreement, VersionAgreement } from "./agreement";
 import { CLAIM_LABELS } from "../results/schema";
-import type { Bar, BiasResult, JudgeSplit } from "./schema";
+import type { Bar, BiasResult, JudgeSplit, LabelSource, Resplit } from "./schema";
 
 export const JUDGE_NAMES: Record<JudgeKind, string> = { judge: "rubric judge", claims: "hallucination judge (claim checker)" };
+export const SOURCE_NAMES: Record<LabelSource, string> = { human: "human labels", model: "model labels" };
+
+// Said wherever the numbers are: how many labels a person made, and that
+// the rest only measure two models agreeing.
+export function sourceNote(reports: SourceReport[], drafted: number): string {
+  const count = (s: LabelSource) => reports.find((r) => r.source === s)?.report.labels.total ?? 0;
+  const human = count("human");
+  const total = reports.reduce((n, r) => n + r.report.labels.total, 0);
+  const draftNote = drafted > 0 ? ` ${drafted} of the human labels were drafted by a model (Claude) from a blind export, then checked by a person before being saved as human.` : "";
+  if (human === total) return `All ${total} labels are human.${draftNote}`;
+  return `Only ${human} of the ${total} labels are human.${draftNote} The other ${total - human} were labelled by a model (Claude) from a blind export, so model-vs-judge is agreement between two models, not accuracy. Only the human numbers say whether a judge is right.`;
+}
 
 const isNum = (x: number) => !Number.isNaN(x);
 export const kappaText = (e: Estimate) => (isNum(e.value) ? `${e.value.toFixed(2)} (${isNum(e.lo) ? `${e.lo.toFixed(2)}–${e.hi.toFixed(2)}` : "–"})` : "–");
@@ -24,12 +36,12 @@ export function barVerdict(row: AgreementRow, bar: Bar | null): string {
 
 // The one line the phase is for, e.g. "hallucination judge: TPR 0.81, TNR
 // 0.90, κ = 0.68 on n = 140 held-out labels".
-export function headline(v: VersionAgreement): string | null {
+export function headline(v: VersionAgreement, source: LabelSource): string | null {
   const row = v.bySplit["judge-test"].rows.at(-1);
   const a = row?.agreement;
   if (!row || !a) return null;
   const two = (x: number) => (isNum(x) ? x.toFixed(2) : "–");
-  return `${JUDGE_NAMES[v.kind]}: TPR ${two(a.tpr)}, TNR ${two(a.tnr)}, κ = ${two(a.kappa)} on n = ${a.n} held-out labels (${row.trials} trials, ${row.tasks} tasks)`;
+  return `${SOURCE_NAMES[source]} vs ${JUDGE_NAMES[v.kind]}: TPR ${two(a.tpr)}, TNR ${two(a.tnr)}, κ = ${kappaText(a.kappaEstimate)} on n = ${a.n} held-out labels (${row.trials} trials, ${row.tasks} tasks)`;
 }
 
 function agreementTable(split: SplitAgreement, bar: Bar | null): string[] {
@@ -40,7 +52,7 @@ function agreementTable(split: SplitAgreement, bar: Bar | null): string[] {
   }
   const notes: string[] = [];
   if (split.ungraded > 0) notes.push(`${split.ungraded} of ${split.trials} trials couldn't be read by the judge and are left out`);
-  if (split.unmatchedClaims > 0) notes.push(`${split.unmatchedClaims} of your claim labels had no claim with the same words from this checker and are left out`);
+  if (split.unmatchedClaims > 0) notes.push(`${split.unmatchedClaims} of the claim labels had no claim with the same words from this checker and are left out`);
   if (notes.length > 0) out.push("", `${notes.join("; ")}.`);
   return out;
 }
@@ -52,29 +64,31 @@ function matrices(v: VersionAgreement, split: JudgeSplit): string[] {
   const caught = v.kind === "judge" ? "fail" : "not supported";
   const left = v.kind === "judge" ? "pass" : "supported";
   const out = [
-    `| you \\ judge | ${caught} | ${left} |`,
+    `| label \\ judge | ${caught} | ${left} |`,
     "|---|---:|---:|",
     `| ${caught} | ${a.truePositives} | ${a.falseNegatives} |`,
     `| ${left} | ${a.falsePositives} | ${a.trueNegatives} |`,
   ];
   if (row.matrix) {
-    out.push("", "By label:", "", `| you \\ checker | ${CLAIM_LABELS.join(" | ")} |`, `|---|${CLAIM_LABELS.map(() => "---:").join("|")}|`);
+    out.push("", "By label:", "", `| label \\ checker | ${CLAIM_LABELS.join(" | ")} |`, `|---|${CLAIM_LABELS.map(() => "---:").join("|")}|`);
     CLAIM_LABELS.forEach((l, i) => out.push(`| ${l} | ${row.matrix![i].join(" | ")} |`));
   }
   return out;
 }
 
-export function validationDoc(o: { report: AgreementReport; bar: Bar | null; bias: BiasResult[]; current: Record<JudgeKind, string>; generatedAt: string }): string {
-  const { report, bar } = o;
-  const current = report.versions.filter((v) => v.judge === o.current[v.kind]);
-  const older = report.versions.filter((v) => v.judge !== o.current[v.kind]);
+export function validationDoc(o: { reports: SourceReport[]; drafted: number; resplit: Resplit | null; bar: Bar | null; bias: BiasResult[]; current: Record<JudgeKind, string>; generatedAt: string }): string {
+  const { bar } = o;
+  // A kind of labeller with no labels gets no section.
+  const reports = o.reports.filter((r) => r.report.labels.total > 0);
+  const isCurrent = (v: VersionAgreement) => v.judge === o.current[v.kind];
   const L: string[] = [];
   L.push("# Judge validation", "", `Generated by \`pnpm agreement\` on ${o.generatedAt}. Don't edit it by hand; rerun the command.`, "");
-  const lines = current.map(headline).filter((h): h is string => h !== null);
+  L.push(`**${sourceNote(reports, o.drafted)}**`, "");
+  const lines = reports.flatMap((r) => r.report.versions.filter(isCurrent).map((v) => headline(v, r.source))).filter((h): h is string => h !== null);
   if (lines.length > 0) L.push(...lines.map((h) => `- ${h}`), "");
 
   L.push("## The bar", "");
-  if (bar) L.push(`A judge is acceptable when its Cohen's κ on judge-test is at least **${bar.minKappa}**. Written down on ${bar.decidedAt}, before any tuning.`, "", bar.reason, "");
+  if (bar) L.push(`A judge is acceptable when its Cohen's κ on judge-test, against human labels, is at least **${bar.minKappa}**. Written down on ${bar.decidedAt}, before any tuning.`, "", bar.reason, "");
   else L.push("Not written down yet: evals/labels/bar.json is missing. Without it no judge can be called acceptable.", "");
 
   L.push(
@@ -86,37 +100,69 @@ export function validationDoc(o: { report: AgreementReport; bar: Bar | null; bia
     "",
   );
 
-  L.push("## The labels", "");
-  const s = report.labels.bySplit;
+  L.push("## The labels", "", "| who labelled | trials | judge-test | judge-dev |", "|---|---:|---|---|");
+  for (const { source, report } of reports) {
+    const s = report.labels.bySplit;
+    L.push(`| ${source} | ${report.labels.total} | ${s["judge-test"].trials} trials, ${s["judge-test"].tasks} tasks | ${s["judge-dev"].trials} trials, ${s["judge-dev"].tasks} tasks |`);
+  }
   L.push(
-    `${report.labels.total} trials labelled by hand: ${s["judge-test"].trials} in judge-test (${s["judge-test"].tasks} tasks) and ${s["judge-dev"].trials} in judge-dev (${s["judge-dev"].tasks} tasks).`,
     "",
-    "Trials come from dev runs only, never the holdout, offered in a fixed random order with no skipping. Each was labelled before the judge's verdict was shown. Each task goes to judge-dev or judge-test by a fixed hash of its id, decided the first time it's labelled and never changed. Only judge-dev is looked at when improving a judge; judge-test only ever gives these numbers.",
+    "Trials come from dev runs only, never the holdout, offered in a fixed random order with no skipping. Each was labelled before the judge's verdict was shown. Each task goes to judge-dev or judge-test by a fixed hash of its id, decided the first time it's labelled; every try of a task stays on one side. Only judge-dev is looked at when improving a judge; judge-test only ever gives these numbers.",
     "",
   );
-
-  for (const split of ["judge-test", "judge-dev"] as const) {
-    L.push(split === "judge-test" ? "## Agreement on judge-test" : "## Agreement on judge-dev (tuned on)", "");
-    if (split === "judge-dev") L.push("These are the labels a judge's mistakes were read from while improving it, so they flatter it. Judge by judge-test.", "");
-    if (current.length === 0) L.push("No judge verdicts on labelled trials yet.", "");
-    for (const v of current) L.push(`### ${JUDGE_NAMES[v.kind]}: ${v.judge}`, "", ...agreementTable(v.bySplit[split], bar), "", "Confusion matrix:", "", ...matrices(v, split), "");
+  if (o.resplit) {
+    const r = o.resplit;
+    L.push(
+      "### The split was redrawn once",
+      "",
+      `On ${r.at.slice(0, 10)}. ${r.reason} Each group of tasks below was evened out by moving as few tasks as possible, picked by a fixed hash; the groups come from the labels, never the judges' verdicts.`,
+      "",
+      "| group | tasks | judge-test | judge-dev |",
+      "|---|---:|---:|---:|",
+      ...r.strata.map((s) => `| ${s.name} | ${s.tasks} | ${s.test} | ${s.dev} |`),
+      "",
+      r.seenInDev.length > 0
+        ? `**${r.seenInDev.length} judge-test tasks were on judge-dev before, so the judges' verdicts on them had already been shown:** ${r.seenInDev.map((t) => `\`${t}\``).join(", ")}. No judge was changed using them. Their numbers are in judge-test as they stand; anything tuned from now on may use judge-dev only.`
+        : "No judge-dev task was moved to judge-test.",
+      "",
+    );
+    if (r.movedToDev.length > 0) L.push(`Moved from judge-test to judge-dev: ${r.movedToDev.map((t) => `\`${t}\``).join(", ")}.`, "");
+  }
+  if (o.drafted > 0 || reports.some((r) => r.source === "model")) {
+    L.push(
+      "Model drafts were made by Claude, in the same pool order, from an export holding only what the labelling page shows before saving: the conversation, the criteria and the claim texts. No verdict, reason or grade was in it. A draft counts as human only once a person has checked it; unchecked model labels are reported apart and never pooled.",
+      "",
+    );
   }
 
-  if (older.length > 0) {
-    L.push("## Earlier judge versions on judge-test", "");
-    for (const v of older) L.push(`### ${JUDGE_NAMES[v.kind]}: ${v.judge}`, "", ...agreementTable(v.bySplit["judge-test"], bar), "");
-  }
-
-  L.push("## Before and after", "");
-  if (report.comparisons.length === 0) L.push("Only one version of each judge has read the labelled trials so far.", "");
-  for (const c of report.comparisons) {
-    L.push(`### ${JUDGE_NAMES[c.kind]}: ${c.before} → ${c.after}`, "", `On the ${c.trials} judge-test trials both versions read.`, "", "| what | κ before | κ after | TPR before | TPR after | TNR before | TNR after |", "|---|---|---|---|---|---|---|");
-    for (const r of c.rows) {
-      const b = r.before.agreement;
-      const a = r.after.agreement;
-      L.push(`| ${r.name} | ${b ? kappaText(b.kappaEstimate) : "–"} | ${a ? kappaText(a.kappaEstimate) : "–"} | ${b ? rateText(b.tprEstimate) : "–"} | ${a ? rateText(a.tprEstimate) : "–"} | ${b ? rateText(b.tnrEstimate) : "–"} | ${a ? rateText(a.tnrEstimate) : "–"} |`);
+  for (const { source, report } of reports) {
+    const current = report.versions.filter(isCurrent);
+    const older = report.versions.filter((v) => !isCurrent(v));
+    const who = source === "human" ? "Human labels" : "Model labels";
+    for (const split of ["judge-test", "judge-dev"] as const) {
+      L.push(`## ${who}: agreement on ${split === "judge-test" ? "judge-test" : "judge-dev (tuned on)"}`, "");
+      if (source === "model") L.push("Agreement between two models, not accuracy.", "");
+      if (split === "judge-dev") L.push("These are the labels a judge's mistakes are read from while improving it, so they flatter it. Judge by judge-test.", "");
+      if (current.length === 0) L.push("No judge verdicts on these labelled trials yet.", "");
+      for (const v of current) L.push(`### ${JUDGE_NAMES[v.kind]}: ${v.judge}`, "", ...agreementTable(v.bySplit[split], bar), "", "Confusion matrix:", "", ...matrices(v, split), "");
     }
-    L.push("", "Overlapping intervals mean the change can't be told apart from noise.", "");
+
+    if (older.length > 0) {
+      L.push(`## ${who}: earlier judge versions on judge-test`, "");
+      for (const v of older) L.push(`### ${JUDGE_NAMES[v.kind]}: ${v.judge}`, "", ...agreementTable(v.bySplit["judge-test"], bar), "");
+    }
+
+    L.push(`## ${who}: before and after`, "");
+    if (report.comparisons.length === 0) L.push("Only one version of each judge has read the labelled trials so far.", "");
+    for (const c of report.comparisons) {
+      L.push(`### ${JUDGE_NAMES[c.kind]}: ${c.before} → ${c.after}`, "", `On the ${c.trials} judge-test trials both versions read.`, "", "| what | κ before | κ after | TPR before | TPR after | TNR before | TNR after |", "|---|---|---|---|---|---|---|");
+      for (const r of c.rows) {
+        const b = r.before.agreement;
+        const a = r.after.agreement;
+        L.push(`| ${r.name} | ${b ? kappaText(b.kappaEstimate) : "–"} | ${a ? kappaText(a.kappaEstimate) : "–"} | ${b ? rateText(b.tprEstimate) : "–"} | ${a ? rateText(a.tprEstimate) : "–"} | ${b ? rateText(b.tnrEstimate) : "–"} | ${a ? rateText(a.tnrEstimate) : "–"} |`);
+      }
+      L.push("", "Overlapping intervals mean the change can't be told apart from noise.", "");
+    }
   }
 
   L.push("## Bias checks", "");

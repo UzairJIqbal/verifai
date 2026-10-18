@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { agreementReport } from "./agreement";
+import { agreementReport, reportsBySource } from "./agreement";
+import { sourceNote } from "./doc";
 import type { JudgeSnapshot, Label } from "./schema";
 
 const RUN = "20261016-000000-0000";
@@ -9,6 +10,7 @@ const label = (taskId: string, split: Label["split"], refusal: boolean, claims: 
   taskId,
   tryNumber: 1,
   split,
+  source: "human",
   rubricVersion: "v1 · aaaaaa",
   claimsPromptVersion: "v1",
   labelledAt: "2026-10-18T00:00:00.000Z",
@@ -92,5 +94,17 @@ describe("agreementReport", () => {
       [0, 0, 1],
       [0, 0, 0],
     ]);
+  });
+});
+
+describe("reportsBySource", () => {
+  it("keeps human and model labels apart and says how many are human", () => {
+    const labels = [label("a", "judge-test", false), { ...label("b", "judge-test", true), source: "model" as const }, { ...label("c", "judge-test", true), source: "model" as const }];
+    const reports = reportsBySource(labels, [judged("a", false), judged("b", false), judged("c", true)], CURRENT);
+    const all = (source: string) => reports.find((r) => r.source === source)!.report.versions[0].bySplit["judge-test"].rows.find((r) => r.name === "all criteria")!;
+    expect(all("human")).toMatchObject({ trials: 1, agreement: { truePositives: 1, falsePositives: 0 } });
+    expect(all("model")).toMatchObject({ trials: 2, agreement: { falsePositives: 1, trueNegatives: 1 } });
+    expect(sourceNote(reports, 0)).toMatch(/^Only 1 of the 3 labels are human\. The other 2 were labelled by a model/);
+    expect(sourceNote(reportsBySource(labels.slice(0, 1), [], CURRENT), 1)).toMatch(/^All 1 labels are human\. 1 of the human labels were drafted by a model/);
   });
 });

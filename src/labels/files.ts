@@ -3,7 +3,7 @@
 // that reads or writes them. Every line is checked; a bad one stops whatever
 // is reading, never skipped quietly.
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { PROJECT_ROOT } from "../config";
@@ -14,16 +14,18 @@ import {
   biasResultSchema,
   judgeSnapshotSchema,
   labelSchema,
+  resplitSchema,
   trialKey,
   type Bar,
   type BiasResult,
   type JudgeSnapshot,
   type JudgeSplit,
   type Label,
+  type Resplit,
   type TrialRef,
 } from "./schema";
 
-export type LabelFiles = { labels: string; snapshots: string; bar: string; bias: string };
+export type LabelFiles = { labels: string; snapshots: string; bar: string; bias: string; resplit: string };
 
 const DIR = join(PROJECT_ROOT, "evals", "labels");
 export const LABEL_FILES: LabelFiles = {
@@ -31,6 +33,7 @@ export const LABEL_FILES: LabelFiles = {
   snapshots: join(DIR, "judge-verdicts.jsonl"),
   bar: join(DIR, "bar.json"),
   bias: join(DIR, "bias.jsonl"),
+  resplit: join(DIR, "resplit.json"),
 };
 
 const shown = (path: string) => path.replace(`${PROJECT_ROOT}/`, "");
@@ -124,6 +127,29 @@ export function recordSnapshots(trials: (TrialRef & { judge: JudgeCheck | null; 
 }
 
 // Null when it hasn't been written down yet.
+// Null when the split was never redrawn.
+export function readResplit(files: LabelFiles = LABEL_FILES): Resplit | null {
+  if (!existsSync(/*turbopackIgnore: true*/ files.resplit)) return null;
+  const parsed = resplitSchema.safeParse(JSON.parse(readFileSync(/*turbopackIgnore: true*/ files.resplit, "utf8")));
+  if (!parsed.success) throw new Error(`${shown(files.resplit)} doesn't match the expected shape:\n${z.prettifyError(parsed.error)}`);
+  return parsed.data;
+}
+
+// Moves every label to its task's new side and writes down what moved.
+// Once only: a split redrawn again and again could be redrawn until a judge
+// looks good.
+export function applyResplit(sides: Map<string, JudgeSplit>, record: Resplit, files: LabelFiles = LABEL_FILES): void {
+  const done = readResplit(files);
+  if (done !== null) throw new Error(`The split was already redrawn on ${done.at}; it isn't redrawn twice.`);
+  const labels = readLabels(files).map((l) => {
+    const split = sides.get(l.taskId);
+    if (split === undefined) throw new Error(`No new side for ${l.taskId}.`);
+    return labelSchema.parse({ ...l, split });
+  });
+  writeFileSync(/*turbopackIgnore: true*/ files.labels, labels.map((l) => `${JSON.stringify(l)}\n`).join(""));
+  writeFileSync(/*turbopackIgnore: true*/ files.resplit, `${JSON.stringify(resplitSchema.parse(record), null, 2)}\n`);
+}
+
 export function readBar(files: LabelFiles = LABEL_FILES): Bar | null {
   if (!existsSync(/*turbopackIgnore: true*/ files.bar)) return null;
   let raw: unknown;

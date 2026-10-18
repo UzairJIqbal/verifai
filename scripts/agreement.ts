@@ -1,4 +1,5 @@
-// `pnpm agreement`: how far each judge agrees with your labels. Prints TPR,
+// `pnpm agreement`: how far each judge agrees with the labels, human labels
+// and model labels reported apart and never pooled. Prints TPR,
 // TNR, Cohen's κ and a confusion matrix per judge on judge-test, the same on
 // judge-dev marked as tuned on, before and after for every changed judge
 // version, the judge-dev mistakes you may tune against, and the bias checks;
@@ -9,9 +10,9 @@ import { styleText } from "node:util";
 import { loadConfig, PROJECT_ROOT } from "../src/config";
 import { dim, fatal } from "../src/eval/session";
 import { loadRubric } from "../src/judge/rubric";
-import { agreementReport, type AgreementRow, type SplitAgreement } from "../src/labels/agreement";
-import { barVerdict, headline, JUDGE_NAMES, kappaText, rateText, validationDoc } from "../src/labels/doc";
-import { readBar, readBiasResults, readLabels, readSnapshots } from "../src/labels/files";
+import { reportsBySource, type AgreementRow, type SplitAgreement } from "../src/labels/agreement";
+import { barVerdict, headline, JUDGE_NAMES, kappaText, rateText, SOURCE_NAMES, sourceNote, validationDoc } from "../src/labels/doc";
+import { readBar, readBiasResults, readLabels, readResplit, readSnapshots } from "../src/labels/files";
 import { snapshotLabelledTrials } from "../src/labels/pick";
 import type { Bar } from "../src/labels/schema";
 
@@ -29,9 +30,9 @@ function printTable(split: SplitAgreement, bar: Bar | null): void {
     console.log(i === 0 ? dim(line) : line);
   });
   const row = split.rows.at(-1)?.agreement;
-  if (row) console.log(dim(`    matrix (you × judge): caught ${row.truePositives} · missed ${row.falseNegatives} · false alarm ${row.falsePositives} · left alone ${row.trueNegatives}`));
+  if (row) console.log(dim(`    matrix (label × judge): caught ${row.truePositives} · missed ${row.falseNegatives} · false alarm ${row.falsePositives} · left alone ${row.trueNegatives}`));
   if (split.ungraded > 0) console.log(styleText("yellow", `    ${split.ungraded} of ${split.trials} trials couldn't be read by the judge; left out.`));
-  if (split.unmatchedClaims > 0) console.log(styleText("yellow", `    ${split.unmatchedClaims} of your claim labels had no claim with the same words from this checker; left out.`));
+  if (split.unmatchedClaims > 0) console.log(styleText("yellow", `    ${split.unmatchedClaims} of the claim labels had no claim with the same words from this checker; left out.`));
 }
 
 function main(): void {
@@ -49,40 +50,48 @@ function main(): void {
     const current = { judge: `${judge.model} · rubric ${loadRubric(judge.rubricVersion).version}`, claims: `${judge.model} · claims ${judge.claimsPromptVersion}` };
     const bar = readBar();
     const bias = readBiasResults();
-    const report = agreementReport(labels, readSnapshots(), current);
+    const resplit = readResplit();
+    const reports = reportsBySource(labels, readSnapshots(), current);
+    const drafted = labels.filter((l) => l.source === "human" && l.draftedBy === "model").length;
 
-    const s = report.labels.bySplit;
-    console.log(styleText("bold", `VerifAI agreement · ${labels.length} labels · judge-test ${s["judge-test"].trials} trials (${s["judge-test"].tasks} tasks) · judge-dev ${s["judge-dev"].trials} trials (${s["judge-dev"].tasks} tasks)`));
+    console.log(styleText("bold", `VerifAI agreement · ${labels.length} labels`));
+    console.log(styleText("yellow", `  ${sourceNote(reports, drafted)}`));
     console.log(dim("  κ (Cohen's kappa) is agreement beyond chance: 1 perfect, 0 chance. TPR: real failures caught. TNR: good ones left alone. Intervals are 95%, by task."));
-    if (bar) console.log(dim(`  Bar: κ ≥ ${bar.minKappa} on judge-test (decided ${bar.decidedAt}).`));
+    if (resplit) console.log(styleText("yellow", `  Split redrawn once on ${resplit.at.slice(0, 10)}, stratified by the labels. Judge-test tasks seen on judge-dev before: ${resplit.seenInDev.join(", ") || "none"}.`));
+    if (bar) console.log(dim(`  Bar: κ ≥ ${bar.minKappa} on judge-test against human labels (decided ${bar.decidedAt}).`));
     else console.log(styleText("yellow", "  No bar written down: evals/labels/bar.json is missing, so nothing can be called acceptable."));
 
-    const inConfig = report.versions.filter((v) => v.judge === current[v.kind]);
-    if (inConfig.length === 0) console.log(styleText("yellow", `\n  The judges in the config haven't read any labelled trial. Run \`pnpm judge <run>\` and \`pnpm claims <run>\` on the labelled runs.`));
-    for (const v of inConfig) {
-      console.log(styleText("bold", `\n  ${JUDGE_NAMES[v.kind]} · ${v.judge}`));
-      console.log("   judge-test");
-      printTable(v.bySplit["judge-test"], bar);
-      console.log(dim("   judge-dev (tuned on: flatters the judge)"));
-      printTable(v.bySplit["judge-dev"], bar);
-    }
-
-    for (const c of report.comparisons) {
-      console.log(styleText("bold", `\n  Before → after on judge-test · ${JUDGE_NAMES[c.kind]} · ${c.trials} trials both read`));
-      console.log(dim(`    ${c.before} → ${c.after}`));
-      for (const r of c.rows) {
-        const b = r.before.agreement;
-        const a = r.after.agreement;
-        console.log(`    ${r.name.padEnd(28)} κ ${b ? kappaText(b.kappaEstimate) : "–"} → ${a ? kappaText(a.kappaEstimate) : "–"}`);
+    for (const { source, report } of reports.filter((r) => r.report.labels.total > 0)) {
+      const s = report.labels.bySplit;
+      console.log(styleText("bold", `\n${SOURCE_NAMES[source]} vs the judges · ${report.labels.total} labels · judge-test ${s["judge-test"].trials} trials (${s["judge-test"].tasks} tasks) · judge-dev ${s["judge-dev"].trials} trials (${s["judge-dev"].tasks} tasks)`));
+      if (source === "model") console.log(dim("  Agreement between two models, not accuracy."));
+      const inConfig = report.versions.filter((v) => v.judge === current[v.kind]);
+      if (inConfig.length === 0) console.log(styleText("yellow", `  The judges in the config haven't read any of these trials. Run \`pnpm judge <run>\` and \`pnpm claims <run>\` on the labelled runs.`));
+      for (const v of inConfig) {
+        console.log(styleText("bold", `\n  ${JUDGE_NAMES[v.kind]} · ${v.judge}`));
+        console.log("   judge-test");
+        printTable(v.bySplit["judge-test"], bar);
+        console.log(dim("   judge-dev (tuned on: flatters the judge)"));
+        printTable(v.bySplit["judge-dev"], bar);
       }
-      console.log(dim("    Overlapping intervals mean the change can't be told from noise."));
-    }
 
-    if (report.devMistakes.length > 0) {
-      console.log(styleText("bold", `\n  Where the current judges disagree with you on judge-dev (${report.devMistakes.length}) — the only mistakes to tune against`));
-      for (const m of report.devMistakes) {
-        console.log(`    ${dim(`${m.runId}/${m.taskId}/${m.tryNumber}`)}  ${m.what}: you ${m.yours}, judge ${m.judges}`);
-        console.log(dim(`      judge's reason: ${m.reason}`));
+      for (const c of report.comparisons) {
+        console.log(styleText("bold", `\n  Before → after on judge-test · ${JUDGE_NAMES[c.kind]} · ${c.trials} trials both read`));
+        console.log(dim(`    ${c.before} → ${c.after}`));
+        for (const r of c.rows) {
+          const b = r.before.agreement;
+          const a = r.after.agreement;
+          console.log(`    ${r.name.padEnd(28)} κ ${b ? kappaText(b.kappaEstimate) : "–"} → ${a ? kappaText(a.kappaEstimate) : "–"}`);
+        }
+        console.log(dim("    Overlapping intervals mean the change can't be told from noise."));
+      }
+
+      if (report.devMistakes.length > 0) {
+        console.log(styleText("bold", `\n  Where the current judges disagree with the ${SOURCE_NAMES[source]} on judge-dev (${report.devMistakes.length}) — the only mistakes to tune against`));
+        for (const m of report.devMistakes) {
+          console.log(`    ${dim(`${m.runId}/${m.taskId}/${m.tryNumber}`)}  ${m.what}: label ${m.yours}, judge ${m.judges}`);
+          console.log(dim(`      judge's reason: ${m.reason}`));
+        }
       }
     }
 
@@ -92,11 +101,13 @@ function main(): void {
       for (const b of latest.values()) console.log(`    ${b.check.padEnd(8)} ${b.changed} of ${b.verdicts} verdicts changed · ${b.trials} trials, ${b.tasks} tasks · ${dim(b.judge)}`);
     }
 
-    writeFileSync(DOC, validationDoc({ report, bar, bias, current, generatedAt: now.toISOString().slice(0, 10) }));
+    writeFileSync(DOC, validationDoc({ reports, drafted, resplit, bar, bias, current, generatedAt: now.toISOString().slice(0, 10) }));
     console.log("");
-    for (const v of inConfig) {
-      const h = headline(v);
-      if (h) console.log(styleText("bold", `  ${h}`));
+    for (const { source, report } of reports) {
+      for (const v of report.versions.filter((x) => x.judge === current[x.kind])) {
+        const h = headline(v, source);
+        if (h) console.log(styleText("bold", `  ${h}`));
+      }
     }
     console.log(dim("\n  Written: docs/judge-validation.md"));
   } catch (error) {

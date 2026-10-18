@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-18T11:38:26.637Z",
+  "reason": "The first split, by task hash alone, put all 4 tasks with a failed criterion in judge-dev, so the rubric judge's κ on judge-test couldn't be computed. Redrawn once, stratified by the labels, after 100 labels and before any rubric change.",
+  "strata": [
+    {
+      "name": "a criterion fails",
+      "tasks": 4,
+      "dev": 2,
+      "test": 2
+    },
+    {
+      "name": "only a claim fails",
+      "tasks": 11,
+      "dev": 6,
+      "test": 5
+    },
+    {
+      "name": "everything passes",
+      "tasks": 19,
+      "dev": 10,
+      "test": 9
+    }
+  ],
+  "seenInDev": [
+    "address-10",
+    "refund-09",
+    "transfer-06"
+  ],
+  "movedToDev": []
+}
