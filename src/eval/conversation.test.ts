@@ -51,7 +51,7 @@ const task = taskSchema.parse({
 });
 
 describe("task conversation", () => {
-  it("sends a canned reply when the agent asks, and records the shop's changes", async () => {
+  it("sends a canned reply after the agent's turn, and records the shop's changes", async () => {
     const model = new MockLanguageModelV4({
       doGenerate: [reply("Shall I cancel order 1005?"), toolCall("a", "cancel_order", { order_id: 1005 }), reply("Done, it's cancelled.")],
     });
@@ -66,10 +66,20 @@ describe("task conversation", () => {
     ]);
   });
 
-  it("ends when the agent asks again and no canned replies are left", async () => {
+  it("answers a turn with no question mark too", async () => {
+    const model = new MockLanguageModelV4({
+      doGenerate: [reply("Please confirm you'd like me to cancel order 1005."), toolCall("a", "cancel_order", { order_id: 1005 }), reply("Done.")],
+    });
+    const trajectory = await runTaskConversation(setupWith(model), task, undefined, seedPath);
+    expect(trajectory.events.filter((e) => e.type === "customer")).toHaveLength(2);
+    expect(trajectory.changes).toHaveLength(1);
+  });
+
+  it("ends after the agent's turn once no canned replies are left", async () => {
     const model = new MockLanguageModelV4({ doGenerate: [reply("Shall I?"), reply("Are you sure?")] });
     const trajectory = await runTaskConversation(setupWith(model), task, undefined, seedPath);
-    expect(trajectory.end).toBe("out-of-replies");
+    expect(trajectory.end).toBe("answered");
+    expect(trajectory.events.filter((e) => e.type === "customer")).toHaveLength(2);
     expect(trajectory.changes).toEqual([]);
   });
 

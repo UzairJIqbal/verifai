@@ -6,9 +6,10 @@ import type { RowChange } from "../shop/diff";
 export type TrajectoryEvent = { type: "customer"; text: string } | AgentEvent;
 
 export type ConversationEnd =
-  // The agent's last reply had no question in it.
+  // The agent replied and the customer had no canned replies left.
   | "answered"
-  // It asked a question but the task had no canned replies left.
+  // Only in dataset v1 runs: the agent asked a question (its reply had a "?")
+  // and no canned replies were left. Kept so their results still read.
   | "out-of-replies"
   // A turn hit the step limit without a reply.
   | "step-limit";

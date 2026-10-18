@@ -92,7 +92,8 @@ describe("freezeHoldout", () => {
     expect(() => freezeHoldout(" ", { files, seedPath })).toThrow(/Say why/);
     freezeHoldout("test re-freeze", { files, seedPath, now: new Date("2026-01-01T00:00:00Z") });
     expect(() => loadTasks({ files })).not.toThrow();
-    expect(readFileSync(files.changelog, "utf8")).toContain("2026-01-01 · v1 · holdout frozen");
+    const { version } = loadTasks({ files });
+    expect(readFileSync(files.changelog, "utf8")).toContain(`2026-01-01 · ${version} · holdout frozen`);
   });
 
   it("refuses a task whose expected changes don't match its reference", () => {

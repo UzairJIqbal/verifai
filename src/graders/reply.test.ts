@@ -21,6 +21,18 @@ describe("date facts", () => {
   it.each(["March 4", "114 March", "2026-03-15", "4 March"])("doesn't count %s", (text) => {
     expect(says(text, { date: "2026-03-14" })).toBe(false);
   });
+  it.each(["2026\u201103\u201114", "2026\u201003\u201014"])("counts a date written with non-breaking or Unicode hyphens (%j)", (text) => {
+    expect(says(text, { date: "2026-03-14" })).toBe(true);
+  });
+});
+
+describe("text facts", () => {
+  it("reads a non-breaking hyphen as a hyphen", () => {
+    expect(says("beyond the 14\u2011day window", { text: ["14-day"] })).toBe(true);
+  });
+  it("keeps a dash a dash", () => {
+    expect(says("within 5\u20137 days", { text: ["5-7"] })).toBe(false);
+  });
 });
 
 describe("reply grader", () => {

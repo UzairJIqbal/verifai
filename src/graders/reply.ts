@@ -15,12 +15,15 @@ const REFUSAL_PHRASES = [
 
 const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
 
-// Lower case, straight apostrophes, single spaces, and no thousands commas
-// ("1,200" → "1200"), so each check below has one form to look for.
+// Lower case, straight apostrophes, plain hyphens, single spaces, and no
+// thousands commas ("1,200" → "1200"), so each check below has one form to look
+// for. The model often writes "2026‑03‑14" with non-breaking hyphens (U+2011)
+// or U+2010; they read the same, so they count the same. Dashes ("5–7") stay.
 export function normalizeReply(text: string): string {
   return text
     .toLowerCase()
     .replace(/[‘’]/g, "'")
+    .replace(/[\u2010\u2011]/g, "-")
     .replace(/(\d),(?=\d)/g, "$1")
     .replace(/\s+/g, " ");
 }

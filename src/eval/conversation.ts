@@ -1,5 +1,5 @@
-// One try of a task: the customer's first message, then a canned reply each
-// time the agent ends a turn with a question, on a fresh copy of the shop.
+// One try of a task: the customer's first message, then the next canned reply
+// after every agent turn until they run out, on a fresh copy of the shop.
 import type { ModelMessage } from "ai";
 import { getShopToday, openFreshShop, SEED_DB_PATH } from "../shop/db";
 import { diffShops, dumpShop } from "../shop/diff";
@@ -7,10 +7,6 @@ import { runAgentTurn, type AgentSetup } from "../agent/loop";
 import { runTool } from "../agent/tools";
 import type { Task } from "../tasks/schema";
 import type { ConversationEnd, Trajectory, TrajectoryEvent } from "./trajectory";
-
-// The agent is waiting on the customer when its reply asks something. Crude,
-// but it's the same rule for every task and every version of the agent.
-export const asksQuestion = (reply: string): boolean => reply.includes("?");
 
 export async function runTaskConversation(
   setup: AgentSetup,
@@ -40,13 +36,12 @@ export async function runTaskConversation(
         end = "step-limit";
         break;
       }
-      if (!asksQuestion(turn.reply)) {
-        end = "answered";
-        break;
-      }
+      // The customer answers every turn, not only ones with a "?": dataset v1
+      // waited for a question mark, so "Please confirm you'd like me to
+      // proceed." got no answer and a polite agent failed for its punctuation.
       const next = replies.shift();
       if (next === undefined) {
-        end = "out-of-replies";
+        end = "answered";
         break;
       }
       customer = next;
