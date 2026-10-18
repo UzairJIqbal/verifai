@@ -9,6 +9,7 @@ import { RunStatsReport } from "@/components/runs/run-stats";
 import { TrialTable, type TrialRow } from "@/components/runs/trial-table";
 import { GraderReportSection } from "@/components/runs/grader-report";
 import { HallucinationSection } from "@/components/runs/hallucination-report";
+import { JudgeSection } from "@/components/runs/judge-report";
 import { OUTCOME_GRADERS } from "@/src/graders";
 import { readRun, type RunFiles } from "@/src/results/read";
 import { trialTags } from "@/src/stats/graders";
@@ -143,6 +144,8 @@ function Run({ runId }: { runId: string }) {
 
       {r.graders && <GraderReportSection runId={r.runId} g={r.graders} linked={files.split !== "holdout"} />}
       {r.hallucination && <HallucinationSection runId={r.runId} h={r.hallucination} linked={files.split !== "holdout"} />}
+      {/* The judge never reads holdout or smoke runs. */}
+      {!r.smoke && files.split !== "holdout" && <JudgeSection runId={r.runId} j={r.judge} />}
 
       {files.split === "holdout" && (
         <div className="mb-4">

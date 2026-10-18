@@ -149,6 +149,7 @@ function buildTrial(args: {
     finishedAt: new Date(args.finishedAt).toISOString(),
     traceUrl: null,
     claims: null,
+    judge: null,
     steps,
   };
 }

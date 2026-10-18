@@ -8,6 +8,7 @@ import { canonical } from "../canonical";
 import { PROJECT_ROOT, type JudgeConfig } from "../config";
 import type { Background } from "../graders/hallucination";
 import { CLAIM_LABELS, type ClaimCheck, type Step } from "../results/schema";
+import { conversationRequest, type ConversationRequest } from "./conversation";
 
 export function loadClaimsPrompt(version: string): string {
   const path = join(PROJECT_ROOT, "judges", "claims", `${version}.md`);
@@ -18,33 +19,11 @@ export function loadClaimsPrompt(version: string): string {
   }
 }
 
-export type ClaimsRequest = {
-  // What the judge reads: the policy, the date and the conversation, each
-  // step numbered as the try's recorded steps are, so a claim's step is the
-  // same step the trajectory page shows.
-  input: string;
-  // The steps that are agent replies: the only ones a claim can come from.
-  replySteps: number[];
-};
+export type ClaimsRequest = ConversationRequest;
 
 // Evidence is only what's in the trajectory, plus the policy and date the
 // agent was given. Never the shop's database.
-export function claimsRequest(steps: Step[], background: Background): ClaimsRequest {
-  const lines: string[] = [];
-  const replySteps: number[] = [];
-  steps.forEach((s, i) => {
-    if (s.type === "customer") lines.push(`[step ${i}] CUSTOMER: ${s.text}`);
-    else if (s.type === "tool-call") lines.push(`[step ${i}] TOOL CALL ${s.toolName} ${JSON.stringify(s.input)}`);
-    else if (s.type === "tool-result") {
-      lines.push(`[step ${i}] TOOL RESULT ${s.toolName}: ${s.outcome.ok ? JSON.stringify(s.outcome.value) : `ERROR ${s.outcome.error}`}`);
-    } else if (s.type === "text") {
-      replySteps.push(i);
-      lines.push(`[step ${i}] AGENT REPLY: ${s.text}`);
-    }
-  });
-  const input = [`TODAY: ${background.today}`, "", "POLICY:", background.policy, "", "CONVERSATION:", ...lines].join("\n");
-  return { input, replySteps };
-}
+export const claimsRequest = (steps: Step[], background: Background): ClaimsRequest => conversationRequest(steps, background);
 
 // The answer as asked for in the prompt. Its shape is also sent to Gemini as
 // the structured output it must follow, but the answer is always checked here

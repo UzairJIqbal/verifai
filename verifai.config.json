@@ -64,6 +64,7 @@
     "thinkingLevel": "low",
     "stepTimeoutSeconds": 90,
     "claimsPromptVersion": "v1",
+    "rubricVersion": "v1",
     "freeTierLimits": {
       "checked": "2026-10-17 on https://aistudio.google.com/rate-limit (gemini-3.5-flash-lite: 15 RPM, 250K TPM, 500 RPD)",
       "requestsPerMinute": 15,

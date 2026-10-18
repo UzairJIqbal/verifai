@@ -13,7 +13,9 @@ import { POLICY_RULES } from "../graders/policy";
 import { outcomeRow, runStats, type RunStats, type Slice } from "../stats/report";
 import { graderReport } from "../stats/graders";
 import { hallucinationReport } from "../stats/hallucination";
+import { judgeReport } from "../stats/judge";
 import { claimCoverage, HALLUCINATION_DEFINITIONS, hallucinationTable } from "./hallucination-text";
+import { JUDGE_CRITERION_TEXT, JUDGE_NOT_RUN, judgeCoverage, judgeTable } from "./judge-text";
 import { flipped, pct, sampleSize, withInterval } from "../stats/format";
 import type { Estimate } from "../stats/stats";
 import {
@@ -99,6 +101,7 @@ export function buildReport(run: StoredRun, trials: Trial[], finishedAt: string,
           referenceLength: new Map([...tasks].map(([id, task]) => [id, task.reference.length])),
         }),
     hallucination: c.smoke ? null : hallucinationReport(trials),
+    judge: c.smoke ? null : judgeReport(trials),
   });
 }
 
@@ -226,6 +229,27 @@ export function renderMarkdown(report: Report, trials: Trial[]): string {
         ];
       })()
     : [];
+  // Its own section: the judge's verdicts never change the success rate.
+  // The judge never reads holdout tries, so a holdout run gets no "run it" line.
+  const judge = report.smoke || report.split === "holdout"
+    ? []
+    : report.judge === null
+      ? ["", "## AI judge", "", JUDGE_NOT_RUN]
+      : (() => {
+          const { header, rows } = judgeTable(report.judge);
+          return [
+            "",
+            "## AI judge",
+            "",
+            `Pass or fail per criterion, reported beside the success rate and never part of it. Each criterion counts only the tries it was asked about. Rates are averaged over tasks with 95% intervals. ${judgeCoverage(report.judge)}`,
+            "",
+            `| ${header.join(" | ")} |`,
+            `| ${header.map(() => "---").join(" | ")} |`,
+            ...rows.map((r) => `| ${r.join(" | ")} |`),
+            "",
+            ...report.judge.criteria.map((c) => `- **${JUDGE_CRITERION_TEXT[c.criterion].name}:** ${JUDGE_CRITERION_TEXT[c.criterion].asks}`),
+          ];
+        })();
   const lines = [
     `# ${report.smoke ? "Smoke run" : "Run"} ${report.runId}`,
     "",
@@ -238,6 +262,7 @@ export function renderMarkdown(report: Report, trials: Trial[]): string {
     ...outcome,
     ...graders,
     ...hallucination,
+    ...judge,
     "",
     `Model calls: ${t.calls} (${t.cachedCalls} replayed from the cache; ${Object.entries(t.callsByProvider).map(([p, n]) => `${n} from ${p}`).join(", ") || "none"}) · tokens in ${t.usage.inputTokens} (${t.usage.cachedInputTokens} cached) · out ${t.usage.outputTokens} · cost $${t.costUsd.toFixed(4)} at list price`,
     "",

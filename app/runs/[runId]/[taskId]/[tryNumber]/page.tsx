@@ -5,6 +5,7 @@ import { PageHeading } from "@/components/shell/empty-state";
 import { formatMs, TranscriptRow } from "@/components/playground/transcript";
 import { countedTokens, formatCount, STATUS_CLASS } from "@/components/runs/format";
 import { ClaimNote, ClaimsLine } from "@/components/runs/claims";
+import { JudgeVerdicts } from "@/components/runs/judge-verdicts";
 import { HoldoutLock } from "@/components/runs/holdout-lock";
 import { LoadError } from "@/components/runs/load-error";
 import { stepsToItems, verdictsByItem } from "@/components/runs/trajectory";
@@ -111,6 +112,7 @@ function Trajectory({ runId, taskId, tryNumber }: Params) {
       </dl>
 
       <VerdictSummary verdicts={trial.verdicts} errored={trial.status === "errored"} />
+      <JudgeVerdicts judge={trial.judge} runId={runId} errored={trial.status === "errored"} hasReply={trial.steps.some((s) => s.type === "text")} />
 
       {items.length === 0 ? (
         <p className="text-muted-foreground">No steps were recorded: the try failed before its first model call.</p>

@@ -7,7 +7,7 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { z } from "zod";
 import { PROJECT_ROOT, REASONING_EFFORTS } from "../config";
 import { SPLITS } from "../tasks/schema";
-import { claimCheckSchema, stepSchema, TRIAL_STATUSES, recordedTrialSchema, verdictSchema, type ClaimCheck, type RecordedTrial } from "../results/schema";
+import { claimCheckSchema, judgeCheckSchema, stepSchema, TRIAL_STATUSES, recordedTrialSchema, verdictSchema, type ClaimCheck, type JudgeCheck, type RecordedTrial } from "../results/schema";
 import type { Redact } from "./redact";
 import type { Verdict } from "./trajectory";
 
@@ -77,6 +77,7 @@ const trialRowSchema = z.object({
   finished_at: z.string(),
   trace_url: z.string().nullable(),
   claims_json: z.string().nullable(),
+  judge_json: z.string().nullable(),
 });
 
 const SCHEMA = `
@@ -107,6 +108,7 @@ CREATE TABLE IF NOT EXISTS trials (
   finished_at TEXT NOT NULL,
   trace_url TEXT,
   claims_json TEXT,
+  judge_json TEXT,
   PRIMARY KEY (run_id, task_id, try)
 );
 CREATE TABLE IF NOT EXISTS steps (
@@ -182,7 +184,8 @@ export class EvalStore {
 
   // Stores made before verdicts pointed at a step: add the columns. Their old
   // grades keep a null step and count as graded, which they were. Stores from
-  // before the hallucination checks get no spans and no claims yet.
+  // before the hallucination checks get no spans and no claims yet, and from
+  // before the judge no judge verdicts.
   private migrate(): void {
     const columnsOf = (table: string) =>
       new Set(z.array(z.object({ name: z.string() })).parse(this.db.prepare(`PRAGMA table_info(${table})`).all()).map((c) => c.name));
@@ -190,7 +193,9 @@ export class EvalStore {
     if (!grades.has("step")) this.db.exec("ALTER TABLE grades ADD COLUMN step INTEGER");
     if (!grades.has("ungraded")) this.db.exec("ALTER TABLE grades ADD COLUMN ungraded INTEGER NOT NULL DEFAULT 0");
     if (!grades.has("spans_json")) this.db.exec("ALTER TABLE grades ADD COLUMN spans_json TEXT NOT NULL DEFAULT '[]'");
-    if (!columnsOf("trials").has("claims_json")) this.db.exec("ALTER TABLE trials ADD COLUMN claims_json TEXT");
+    const trials = columnsOf("trials");
+    if (!trials.has("claims_json")) this.db.exec("ALTER TABLE trials ADD COLUMN claims_json TEXT");
+    if (!trials.has("judge_json")) this.db.exec("ALTER TABLE trials ADD COLUMN judge_json TEXT");
   }
 
   close(): void {
@@ -284,8 +289,8 @@ export class EvalStore {
       this.db
         .prepare(
           `INSERT INTO trials (run_id, task_id, try, category, status, end_reason, error, calls, cached_calls,
-             input_tokens, cached_input_tokens, output_tokens, cost_usd, model_latency_ms, started_at, finished_at, trace_url, claims_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             input_tokens, cached_input_tokens, output_tokens, cost_usd, model_latency_ms, started_at, finished_at, trace_url, claims_json, judge_json)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           runId,
@@ -306,6 +311,7 @@ export class EvalStore {
           trial.finishedAt,
           trial.traceUrl,
           trial.claims === null ? null : this.json(trial.claims),
+          trial.judge === null ? null : this.json(trial.judge),
         );
       const step = this.db.prepare("INSERT INTO steps (run_id, task_id, try, seq, type, payload_json) VALUES (?, ?, ?, ?, ?, ?)");
       trial.steps.forEach((s, seq) => step.run(runId, trial.taskId, trial.tryNumber, seq, s.type, this.json(s)));
@@ -341,6 +347,16 @@ export class EvalStore {
     });
   }
 
+  // The AI judge's verdicts for some tries of a run, all at once or none.
+  saveJudgments(runId: string, judgments: { taskId: string; tryNumber: number; judge: JudgeCheck }[]): void {
+    this.transaction(() => {
+      const save = this.db.prepare("UPDATE trials SET judge_json = ? WHERE run_id = ? AND task_id = ? AND try = ?");
+      for (const j of judgments) {
+        if (save.run(this.json(j.judge), runId, j.taskId, j.tryNumber).changes !== 1) throw new Error(`Run ${runId} has no try ${j.taskId}#${j.tryNumber} to save judge verdicts for.`);
+      }
+    });
+  }
+
   loadTrials(runId: string): RecordedTrial[] {
     const rows = this.db.prepare("SELECT * FROM trials WHERE run_id = ? ORDER BY task_id, try").all(runId).map((r) => trialRowSchema.parse(r));
     const stepsOf = this.db.prepare("SELECT payload_json FROM steps WHERE run_id = ? AND task_id = ? AND try = ? ORDER BY seq");
@@ -367,6 +383,7 @@ export class EvalStore {
         traceUrl: r.trace_url,
         steps: payloads.parse(stepsOf.all(...args)).map((p) => stepSchema.parse(JSON.parse(p.payload_json))),
         claims: r.claims_json === null ? null : claimCheckSchema.parse(JSON.parse(r.claims_json)),
+        judge: r.judge_json === null ? null : judgeCheckSchema.parse(JSON.parse(r.judge_json)),
       });
     });
   }

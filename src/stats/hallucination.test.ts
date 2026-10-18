@@ -34,6 +34,7 @@ const trial = (taskId: string, o: { entity: boolean; replies: number; claims?: C
       : o.claims === "ungraded"
         ? { status: "ungraded", model: "m", promptVersion: "v1", reason: "not JSON" }
         : { status: "checked", model: "m", promptVersion: "v1", claims: o.claims },
+  judge: null,
 });
 
 describe("hallucination report", () => {

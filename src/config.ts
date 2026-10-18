@@ -84,6 +84,8 @@ const judgeSchema = z.strictObject({
   stepTimeoutSeconds: z.number().positive(),
   // agent/… holds the agent's words; judges/claims/<version>.md the claim checker's.
   claimsPromptVersion: versionName,
+  // judges/rubric/<version>.md: the criteria the judge marks pass or fail.
+  rubricVersion: versionName,
   freeTierLimits: z.strictObject({
     checked: z.string().min(1),
     requestsPerMinute: z.number().int().positive(),

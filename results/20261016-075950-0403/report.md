@@ -96,6 +96,20 @@ Rates are averaged over tasks with 95% intervals; the reply and claim rates pool
 - **Replies with a bad claim:** Agent replies with at least one claim the judge labelled unsupported or contradicted, over every reply in the tries it read.
 - **Unsupported claims:** Claims labelled unsupported (nothing in the evidence states it or lets you work it out), over every claim the judge split the replies into. Contradicted claims are counted beside it, not in it.
 
+## AI judge
+
+Pass or fail per criterion, reported beside the success rate and never part of it. Each criterion counts only the tries it was asked about. Rates are averaged over tasks with 95% intervals. Judged by gemini-3.5-flash-lite · rubric v1 · 9fa202: 136 of 136 tries with a reply.
+
+|  | tasks | tries | passed | pass rate |
+| --- | --- | --- | --- | --- |
+| refusal explained | 9 | 31 | 29/31 tries | 94.4% (86.1–100.0) |
+| answered question | 35 | 136 | 136/136 tries | 100.0% (100.0–100.0) |
+| tone | 35 | 136 | 136/136 tries | 100.0% (100.0–100.0) |
+
+- **refusal explained:** When the agent turned something down, it said which rule and what the customer can do instead. Asked only on tries where the task expects a refusal and the agent gave one.
+- **answered question:** Every request the customer made was answered, done or turned down.
+- **tone:** Polite and plain: no blame, no over-apologising, no internal words.
+
 Model calls: 481 (0 replayed from the cache; 142 from cloudflare, 339 from groq) · tokens in 569847 (323328 cached) · out 24942 · cost $0.1062 at list price
 
 ## By task

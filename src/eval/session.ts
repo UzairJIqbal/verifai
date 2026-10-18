@@ -21,6 +21,7 @@ import { makeRedactor, type Redact } from "./redact";
 import { runTrials, type PoolProvider, type Progress } from "./runner";
 import { EVAL_STORE_PATH, EvalStore, tryKey, type RunConfig, type StoredRun } from "./store";
 import { langfuseSecrets, startTracing, type Tracing } from "./tracing";
+import { judgeCoverage, judgeTable } from "../results/judge-text";
 import { claimCoverage, hallucinationTable } from "../results/hallucination-text";
 import { graderTables, statsTable, successLine, writeResults } from "../results/write";
 import type { Report } from "../results/schema";
@@ -229,6 +230,7 @@ export function printReport(report: Report): void {
   printTable(header, rows, [1, 1 + Object.keys(report.stats.byCategory).length]);
   printGraderReport(report);
   printHallucinationReport(report);
+  printJudgeReport(report);
   if (report.totals.errored > 0) {
     console.log(styleText(["yellow", "bold"], `⚠ ${report.totals.errored} tries errored. They count as not passed, so these rates understate the agent.`));
   }
@@ -252,6 +254,15 @@ export function printHallucinationReport(report: Report): void {
   console.log(`\n${styleText("bold", "Hallucination")} ${dim("· rates averaged over tasks, 95% intervals")}`);
   console.log(dim(`  ${claimCoverage(report.hallucination)}`));
   const { header, rows } = hallucinationTable(report.hallucination);
+  printTable(header, rows);
+}
+
+// The AI judge's verdicts, in their own section: they never decide a pass.
+export function printJudgeReport(report: Report): void {
+  if (!report.judge) return;
+  console.log(`\n${styleText("bold", "AI judge")} ${dim("· pass or fail per criterion, beside the success rate and never part of it · 95% intervals")}`);
+  console.log(dim(`  ${judgeCoverage(report.judge)}`));
+  const { header, rows } = judgeTable(report.judge);
   printTable(header, rows);
 }
 

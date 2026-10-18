@@ -1,7 +1,7 @@
 // The per-grader section of a run report, from the tries' verdicts and steps,
 // and the tags that link each of its numbers to the tries behind it.
 // Browser-safe and pure.
-import type { ClaimCheck, GraderReport, GraderRow, ToolRow, Trial } from "../results/schema";
+import type { ClaimCheck, GraderReport, JudgeCheck, GraderRow, ToolRow, Trial } from "../results/schema";
 import { bootstrapRatio, meanEstimate, passEstimate, type Estimate, type TaskOutcome } from "./stats";
 
 const byTaskId = <T extends { taskId: string }>(rows: T[]) => [...rows].sort((a, b) => (a.taskId < b.taskId ? -1 : a.taskId > b.taskId ? 1 : 0));
@@ -125,11 +125,13 @@ export function graderReport(args: {
 // `called:`, `expected:`, `right:` (called and needed), `wrong:` (called but
 // not needed) and `missed:` (needed but not called). From the claim checker,
 // `claims:flagged` (a reply has an unsupported or contradicted claim),
-// `claims:unsupported`, `claims:contradicted` and `ungraded:claims`.
-export function trialTags(t: Pick<Trial, "status" | "verdicts" | "steps" | "expectedTools" | "claims">): Set<string> {
+// `claims:unsupported`, `claims:contradicted` and `ungraded:claims`. From the
+// AI judge, `judge:fail:<criterion>` and `ungraded:judge`.
+export function trialTags(t: Pick<Trial, "status" | "verdicts" | "steps" | "expectedTools" | "claims" | "judge">): Set<string> {
   const tags = new Set<string>();
   if (t.status === "errored") return tags;
   for (const tag of claimTags(t.claims)) tags.add(tag);
+  for (const tag of judgeTags(t.judge)) tags.add(tag);
   for (const v of t.verdicts) {
     if (v.ungraded) tags.add(`ungraded:${v.grader}`);
     else if (!v.pass) {
@@ -155,6 +157,12 @@ function claimTags(claims: ClaimCheck | null): string[] {
   ];
 }
 
+function judgeTags(judge: JudgeCheck | null): string[] {
+  if (judge === null) return [];
+  if (judge.status === "ungraded") return ["ungraded:judge"];
+  return judge.verdicts.flatMap((v) => (v.pass ? [] : [`judge:fail:${v.criterion}`]));
+}
+
 // A tag in words, for "showing the tries that …".
 export function describeTag(tag: string): string {
   if (tag === "policy-violation") return "broke a policy rule";
@@ -162,6 +170,8 @@ export function describeTag(tag: string): string {
   if (tag === "claims:unsupported") return "have an unsupported claim";
   if (tag === "claims:contradicted") return "have a contradicted claim";
   if (tag === "ungraded:claims") return "the claim checker couldn't grade";
+  if (tag === "ungraded:judge") return "the AI judge couldn't grade";
+  if (tag.startsWith("judge:fail:")) return `the AI judge failed on ${tag.slice("judge:fail:".length)}`;
   if (tag === "fail:fabricated-entity") return "wrote a value never seen before (fabricated entity)";
   if (tag === "fail:fabricated-action") return "claimed an action with no matching call (fabricated action)";
   const [kind, name] = [tag.slice(0, tag.indexOf(":")), tag.slice(tag.indexOf(":") + 1)];

@@ -50,6 +50,7 @@ const trial = (tryNumber: number, status: RecordedTrial["status"], taskId = "sta
     { type: "text", step: 1, text: "It's processing." },
   ],
   claims: null,
+  judge: null,
 });
 
 function runFor(split: "dev" | "holdout", id: string, smoke = false): StoredRun {

@@ -82,6 +82,25 @@ export const claimCheckSchema = z.discriminatedUnion("status", [
 ]);
 export type ClaimCheck = z.infer<typeof claimCheckSchema>;
 
+// The criteria the AI judge marks, in the order they're shown. Only what code
+// can't check: the rest is done by the graders.
+export const JUDGE_CRITERIA = ["refusal-explained", "answered-question", "tone"] as const;
+export type JudgeCriterion = (typeof JUDGE_CRITERIA)[number];
+
+export const criterionVerdictSchema = z.object({ criterion: z.enum(JUDGE_CRITERIA), pass: z.boolean(), reason: z.string() });
+export type CriterionVerdict = z.infer<typeof criterionVerdictSchema>;
+
+// What the judge made of one try, against one rubric. `rubricVersion` is the
+// file's version and a hash of its words ("v1 · 3f2a9c"), so an edit without
+// a new version still shows as a different rubric. Only the criteria that
+// applied to the try have a verdict. Ungraded when the answer couldn't be
+// read: never a pass.
+export const judgeCheckSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("judged"), model: z.string(), rubricVersion: z.string(), verdicts: z.array(criterionVerdictSchema) }),
+  z.object({ status: z.literal("ungraded"), model: z.string(), rubricVersion: z.string(), reason: z.string() }),
+]);
+export type JudgeCheck = z.infer<typeof judgeCheckSchema>;
+
 export const TRIAL_STATUSES = ["passed", "failed", "errored"] as const;
 export type TrialStatus = (typeof TRIAL_STATUSES)[number];
 
@@ -107,6 +126,8 @@ export const recordedTrialSchema = z.object({
   steps: z.array(stepSchema),
   // Null until `pnpm claims` has checked this try.
   claims: claimCheckSchema.nullable().default(null),
+  // Null until `pnpm judge` has judged this try. Never part of its status.
+  judge: judgeCheckSchema.nullable().default(null),
 });
 export type RecordedTrial = z.infer<typeof recordedTrialSchema>;
 
@@ -212,6 +233,26 @@ export const hallucinationReportSchema = z.object({
 });
 export type HallucinationReport = z.infer<typeof hallucinationReportSchema>;
 
+// One judged criterion across a run: of the tries it applied to, how many
+// passed, averaged over tasks with an interval.
+const judgeRowSchema = z.object({ criterion: z.enum(JUDGE_CRITERIA), tasks: count, tries: count, passed: count, rate: estimateSchema.nullable() });
+export type JudgeRow = z.infer<typeof judgeRowSchema>;
+
+// The AI judge's verdicts, beside the success rate and never part of it.
+// Null until `pnpm judge` has read any try of the run.
+export const judgeReportSchema = z.object({
+  // Who judged, as "<model> · rubric <version>". More than one only if the
+  // rubric or model changed and `pnpm judge` hasn't caught up.
+  judges: z.array(z.string()),
+  // Tries that could be judged (not errored, with a reply), of them judged,
+  // and those whose answer couldn't be read.
+  judgeable: count,
+  judged: count,
+  ungraded: count,
+  criteria: z.array(judgeRowSchema),
+});
+export type JudgeReport = z.infer<typeof judgeReportSchema>;
+
 export const runStatsSchema = z.object({
   overall: sliceSchema,
   byCategory: z.partialRecord(z.enum(CATEGORIES), sliceSchema),
@@ -263,6 +304,8 @@ export const reportSchema = z.object({
   graders: graderReportSchema.nullable().default(null),
   // Null for a smoke run, and absent from runs graded before the checks.
   hallucination: hallucinationReportSchema.nullable().default(null),
+  // Null for a smoke run and until `pnpm judge` has read the run.
+  judge: judgeReportSchema.nullable().default(null),
 });
 export type Report = z.infer<typeof reportSchema>;
 

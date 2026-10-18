@@ -862,5 +862,48 @@
         }
       }
     }
+  },
+  "judge": {
+    "judges": [
+      "gemini-3.5-flash-lite · rubric v1 · 9fa202"
+    ],
+    "judgeable": 136,
+    "judged": 136,
+    "ungraded": 0,
+    "criteria": [
+      {
+        "criterion": "refusal-explained",
+        "tasks": 9,
+        "tries": 31,
+        "passed": 29,
+        "rate": {
+          "value": 0.9444444444444444,
+          "lo": 0.8611111111111112,
+          "hi": 1
+        }
+      },
+      {
+        "criterion": "answered-question",
+        "tasks": 35,
+        "tries": 136,
+        "passed": 136,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "criterion": "tone",
+        "tasks": 35,
+        "tries": 136,
+        "passed": 136,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      }
+    ]
   }
 }

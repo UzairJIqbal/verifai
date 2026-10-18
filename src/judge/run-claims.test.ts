@@ -35,6 +35,7 @@ const trial = (tryNumber: number, reply: string | null, status: RecordedTrial["s
   traceUrl: null,
   steps: [{ type: "customer", text: `Where is order 1012? (try ${tryNumber})` }, ...(reply === null ? [] : [{ type: "text" as const, step: 1, text: reply }])],
   claims: null,
+  judge: null,
 });
 
 // Time that only moves when something sleeps.

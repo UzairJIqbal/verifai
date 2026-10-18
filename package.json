@@ -16,6 +16,7 @@
     "compare": "tsx scripts/compare.ts",
     "regrade": "tsx scripts/regrade.ts",
     "claims": "tsx scripts/claims.ts",
+    "judge": "tsx scripts/judge.ts",
     "tasks:freeze": "tsx scripts/freeze-tasks.ts"
   },
   "dependencies": {
