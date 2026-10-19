@@ -1,6 +1,6 @@
 // What the gate writes: its record (always), and on a pass the promotion: the
 // config's agent keys, and a CHANGELOG.md entry.
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { PROJECT_ROOT } from "../config";
@@ -36,12 +36,31 @@ export function gateComparison(c: Comparison): GateRecord["dev"] {
 }
 
 // e.g. 20261021-101500-v2.json: sorts by when it ran.
+export function gateRecordPath(record: Pick<GateRecord, "decidedAt" | "name">, dir: string = GATES_DIR): string {
+  const stamp = record.decidedAt.replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
+  return join(dir, `${stamp}-${record.name}.json`);
+}
+
 export function writeGateRecord(record: GateRecord, dir: string = GATES_DIR): string {
   mkdirSync(/*turbopackIgnore: true*/ dir, { recursive: true });
-  const stamp = record.decidedAt.replace(/[-:]/g, "").replace("T", "-").slice(0, 15);
-  const path = join(dir, `${stamp}-${record.name}.json`);
+  const path = gateRecordPath(record, dir);
   writeFileSync(/*turbopackIgnore: true*/ path, `${JSON.stringify(gateRecordSchema.parse(record), null, 2)}\n`);
   return path;
+}
+
+/**
+ * The files as they are now, and a way to put them back: a file that didn't
+ * exist is removed. Promotion takes one before it writes anything, so a
+ * failure halfway leaves no file saying the candidate was promoted.
+ */
+export function snapshotFiles(paths: string[]): () => void {
+  const before = paths.map((path) => ({ path, text: existsSync(/*turbopackIgnore: true*/ path) ? readFileSync(/*turbopackIgnore: true*/ path, "utf8") : null }));
+  return () => {
+    for (const { path, text } of before) {
+      if (text === null) rmSync(/*turbopackIgnore: true*/ path, { force: true });
+      else writeFileSync(/*turbopackIgnore: true*/ path, text);
+    }
+  };
 }
 
 export type GateListing = { gates: GateRecord[]; problems: string[] };

@@ -1,6 +1,6 @@
 // A regression task in the making: a reviewed dev failure turned into a draft
 // under evals/drafts/, which you finish by hand and add with `pnpm task:add`.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { PROJECT_ROOT } from "../config";
@@ -45,6 +45,14 @@ export function draftPath(id: string, dir: string = DRAFTS_DIR): string {
   if (!/^[a-z]+-\d{2}$/.test(id)) throw new Error(`A draft is named by its task id, like cancel-11, not "${id}".`);
   return join(dir, `${id}.json`);
 }
+
+// The ids of drafts waiting to be added, so a new draft doesn't take one.
+export const draftIds = (dir: string = DRAFTS_DIR): string[] =>
+  existsSync(/*turbopackIgnore: true*/ dir)
+    ? readdirSync(/*turbopackIgnore: true*/ dir)
+        .filter((f) => /^[a-z]+-\d{2}\.json$/.test(f))
+        .map((f) => f.slice(0, -5))
+    : [];
 
 export function writeDraft(draft: Draft, dir: string = DRAFTS_DIR): string {
   const path = draftPath(draft.id, dir);

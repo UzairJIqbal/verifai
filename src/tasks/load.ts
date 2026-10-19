@@ -2,7 +2,7 @@
 // holdout against its frozen fingerprint, and hands out dev tasks unless the
 // caller says it's gating.
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { z } from "zod";
 import { canonical } from "../canonical";
@@ -167,9 +167,12 @@ export const nextDatasetVersion = (version: string): string => {
   return `v${Number(m[1]) + 1}`;
 };
 
-// A free id in the category: one past the highest used on either split.
-export function nextTaskId(category: Category, files: TaskFiles = TASK_FILES): string {
-  const used = readTaskFile(files.tasks).tasks.filter((t) => t.category === category).map((t) => Number(t.id.slice(category.length + 1)));
+// A free id in the category: one past the highest used on either split or
+// held by a draft not yet added (`reserved`).
+export function nextTaskId(category: Category, files: TaskFiles = TASK_FILES, reserved: string[] = []): string {
+  const used = [...readTaskFile(files.tasks).tasks.map((t) => t.id), ...reserved]
+    .filter((id) => id.startsWith(`${category}-`))
+    .map((id) => Number(id.slice(category.length + 1)));
   const id = Math.max(0, ...used) + 1;
   if (id > 99) throw new Error(`${category} has no ids left (ids are two digits).`);
   return `${category}-${String(id).padStart(2, "0")}`;
@@ -197,7 +200,11 @@ export function addDevTask(task: Task, reason: string, options: { files?: TaskFi
 
   const next = nextDatasetVersion(version);
   const lines = readFileSync(/*turbopackIgnore: true*/ files.tasks, "utf8").split("\n").filter((l, i) => i > 0 && l.trim() !== "");
-  writeFileSync(/*turbopackIgnore: true*/ files.tasks, [JSON.stringify({ dataset_version: next }), ...lines, JSON.stringify(taskSchema.parse(task))].join("\n") + "\n");
+  // Written beside it, then renamed over it: a crash halfway leaves the old
+  // file whole, never a cut-off one.
+  const temp = `${files.tasks}.tmp`;
+  writeFileSync(/*turbopackIgnore: true*/ temp, [JSON.stringify({ dataset_version: next }), ...lines, JSON.stringify(taskSchema.parse(task))].join("\n") + "\n");
+  renameSync(/*turbopackIgnore: true*/ temp, files.tasks);
   const day = (options.now ?? new Date()).toISOString().slice(0, 10);
   if (!existsSync(/*turbopackIgnore: true*/ files.changelog)) writeFileSync(/*turbopackIgnore: true*/ files.changelog, "# Tasks changelog\n\nEvery change to the holdout, and why.\n\n");
   appendFileSync(/*turbopackIgnore: true*/ files.changelog, `- ${day} · ${next} · dev task ${task.id} added (holdout unchanged). ${reason.trim()} Scores from ${version} and ${next} are not comparable.\n`);

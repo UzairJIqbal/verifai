@@ -8,7 +8,7 @@ import { dim, fatal } from "../src/eval/session";
 import { devTrials, readRun } from "../src/results/read";
 import { readNotes, readTags } from "../src/review/files";
 import { trialKey } from "../src/review/schema";
-import { makeDraft, writeDraft } from "../src/tasks/draft";
+import { draftIds, makeDraft, writeDraft } from "../src/tasks/draft";
 import { loadTasks, nextTaskId } from "../src/tasks/load";
 
 const USAGE = "Usage: pnpm task:new <run> <task> <try>   (a dev failure you've reviewed, e.g. pnpm task:new 20261015-0912-ab12 refund-04 2)";
@@ -33,7 +33,7 @@ function main(): void {
 
     const source = loadTasks().tasks.find((t) => t.id === ref.taskId);
     if (!source) fatal(`${ref.taskId} isn't a dev task in the current dataset.`);
-    const id = nextTaskId(source.category);
+    const id = nextTaskId(source.category, undefined, draftIds());
     const path = writeDraft(
       makeDraft(source, id, { ...ref, datasetVersion: files.report.datasetVersion, failureCategory: tag?.category ?? null, reviewNote: note.note }),
     );

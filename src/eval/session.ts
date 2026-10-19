@@ -9,7 +9,7 @@ import { loadConfig, PROJECT_ROOT, type Config } from "../config";
 import { getShopToday, openFreshShop } from "../shop/db";
 import { knobsOf, loadAgentVersion, type AgentKnobs, type AgentVersion } from "../agent/versions";
 import { cachedEmbedding, connectEmbedder, embedTexts, embeddingSecrets, uncachedTexts, type SendEmbeddings } from "../embedding/embed";
-import { exemplarBlock, exemplarStoreHash, pickExemplars, readExemplars, type Exemplar } from "../exemplars/store";
+import { checkExemplarsFit, exemplarBlock, exemplarStoreHash, pickExemplars, readExemplars, type Exemplar } from "../exemplars/store";
 import { connectAgent, describeModelError, type AgentConnection } from "../agent/model";
 import { loadTasks, type LoadedTasks } from "../tasks/load";
 import type { Split, Task } from "../tasks/schema";
@@ -170,6 +170,7 @@ export async function openSession(args: { useCache: boolean; smoke: boolean; pla
       const devIds = plan.split === "dev" ? new Set(plan.loaded.tasks.map((t) => t.id)) : plan.devTaskIds;
       const entries = readExemplars(devIds);
       if (entries.length === 0) throw new Error("This version uses exemplars, but evals/exemplars.jsonl has none. Add some with `pnpm exemplars:add <dev run>`.");
+      checkExemplarsFit(entries, config.embedding);
       const embedder = connectEmbedder(config.embedding);
       exemplars = { entries, send: embedder.send, byTask: null };
       secrets = embedder.secrets;

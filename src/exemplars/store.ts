@@ -69,12 +69,34 @@ export const appendExemplars = (entries: Exemplar[], path: string = EXEMPLARS_FI
   if (entries.length > 0) appendFileSync(/*turbopackIgnore: true*/ path, entries.map((e) => `${JSON.stringify(exemplarSchema.parse(e))}\n`).join(""));
 };
 
-// Which store a run used, so a changed store is a changed configuration.
+// Which store a run used, so a changed store is a changed configuration. The
+// content counts too: an entry edited by hand is a different store.
 export const exemplarStoreHash = (entries: Exemplar[]): string =>
   createHash("sha256")
-    .update(canonical([...entries].sort((a, b) => a.taskId.localeCompare(b.taskId)).map((e) => ({ taskId: e.taskId, runId: e.runId, tryNumber: e.tryNumber, embeddingModel: e.embeddingModel }))))
+    .update(
+      canonical(
+        [...entries]
+          .sort((a, b) => a.taskId.localeCompare(b.taskId))
+          .map((e) => ({ taskId: e.taskId, runId: e.runId, tryNumber: e.tryNumber, embeddingModel: e.embeddingModel, firstMessage: e.firstMessage, embedding: e.embedding, transcript: e.transcript })),
+      ),
+    )
     .digest("hex")
     .slice(0, 16);
+
+/**
+ * Refuses entries embedded by another model or at another size than the
+ * config's: their similarity to a task's embedding would mean nothing, or
+ * the comparison would fail halfway through a run.
+ */
+export function checkExemplarsFit(entries: Exemplar[], embedding: { model: string; dimensions: number }): void {
+  const misfits = entries.filter((e) => e.embeddingModel !== embedding.model || e.embedding.length !== embedding.dimensions);
+  if (misfits.length === 0) return;
+  const which = misfits.map((e) => `${e.taskId} (${e.embeddingModel}, ${e.embedding.length} numbers)`).join(", ");
+  throw new Error(
+    `These exemplars weren't embedded with ${embedding.model} at ${embedding.dimensions} numbers, as the config says: ${which}. ` +
+      "Remove their lines from evals/exemplars.jsonl and add them again with `pnpm exemplars:add <dev run>`.",
+  );
+}
 
 // A try worth copying: it passed, and so did every grader, including the
 // policy ones that don't decide a pass. A try that passed while attempting a

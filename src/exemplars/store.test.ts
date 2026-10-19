@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { exemplarBlock, pickExemplars, readExemplars, type Exemplar } from "./store";
+import { checkExemplarsFit, exemplarBlock, exemplarStoreHash, pickExemplars, readExemplars, type Exemplar } from "./store";
 
 const dir = mkdtempSync(join(tmpdir(), "verifai-exemplars-test-"));
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
@@ -38,5 +38,18 @@ describe("exemplar memory", () => {
   it("adds nothing to the prompt when there's nothing to show", () => {
     expect(exemplarBlock([])).toBe("");
     expect(exemplarBlock([entry("a-01", [1, 0])])).toContain("Customer: hi from a-01");
+  });
+
+  it("counts an entry's content in the store's identity", () => {
+    const a = entry("a-01", [1, 0]);
+    expect(exemplarStoreHash([{ ...a, transcript: ["Customer: edited"] }])).not.toBe(exemplarStoreHash([a]));
+    expect(exemplarStoreHash([{ ...a, embedding: [0, 1] }])).not.toBe(exemplarStoreHash([a]));
+    expect(exemplarStoreHash([{ ...a, addedAt: "2026-10-20T00:00:00.000Z" }])).toBe(exemplarStoreHash([a]));
+  });
+
+  it("refuses entries from another embedding model or size, naming them", () => {
+    const entries = [entry("a-01", [1, 0]), { ...entry("b-01", [1, 0]), embeddingModel: "other" }, entry("c-01", [1, 0, 0])];
+    expect(() => checkExemplarsFit(entries.slice(0, 1), { model: "m", dimensions: 2 })).not.toThrow();
+    expect(() => checkExemplarsFit(entries, { model: "m", dimensions: 2 })).toThrow(/b-01 \(other, 2 numbers\), c-01 \(m, 3 numbers\)/);
   });
 });

@@ -129,6 +129,14 @@ describe("regression tasks", () => {
     expect(readFileSync(files.changelog, "utf8")).toContain(`2026-01-02 · ${version} · dev task ${id} added`);
   });
 
+  it("skip ids held by drafts not yet added", () => {
+    const first = nextTaskId("cancel", files);
+    const n = Number(first.slice("cancel-".length));
+    const id = (k: number) => `cancel-${String(k).padStart(2, "0")}`;
+    expect(nextTaskId("cancel", files, [first, "refund-90"])).toBe(id(n + 1));
+    expect(nextTaskId("cancel", files, [id(n + 4)])).toBe(id(n + 5));
+  });
+
   it("refuse a task whose expected changes its reference calls don't produce", () => {
     const source = loadTasks({ files }).tasks.find((t) => t.expected.changes.length > 0);
     if (!source) throw new Error("no dev task with changes");

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -9,7 +9,7 @@ import type { Category } from "../tasks/schema";
 import { candidateKnobs, readCandidate, type Candidate } from "./candidates";
 import { decideGate } from "./check";
 import { agentKey, newestFloorFor, rescaleNoise } from "./floor";
-import { addChangelogEntry, changelogEntry, gateComparison, listGates, rewriteConfigText, writeGateRecord } from "./record";
+import { addChangelogEntry, changelogEntry, gateComparison, listGates, rewriteConfigText, snapshotFiles, writeGateRecord } from "./record";
 import type { GateRecord } from "./schema";
 
 const dir = mkdtempSync(join(tmpdir(), "verifai-gate-test-"));
@@ -115,6 +115,18 @@ describe("the gate decision", () => {
 });
 
 describe("promotion files", () => {
+  it("puts every file back as it was after a failure, removing ones that were new", () => {
+    const kept = join(dir, "kept.txt");
+    const fresh = join(dir, "fresh.txt");
+    writeFileSync(kept, "before");
+    const restore = snapshotFiles([kept, fresh]);
+    writeFileSync(kept, "promoted");
+    writeFileSync(fresh, "record");
+    restore();
+    expect(readFileSync(kept, "utf8")).toBe("before");
+    expect(existsSync(fresh)).toBe(false);
+  });
+
   const configText = readFileSync(join(__dirname, "../../verifai.config.json"), "utf8");
 
   it("rewrites only the agent version keys, keeping the rest byte for byte", () => {

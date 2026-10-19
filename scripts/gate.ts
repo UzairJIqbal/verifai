@@ -17,7 +17,7 @@ import type { RunConfig } from "../src/eval/store";
 import { candidateKnobs, describeChange, readCandidate, type Candidate } from "../src/gate/candidates";
 import { decideGate } from "../src/gate/check";
 import { agentKey, newestFloorFor, rescaleNoise, type FloorSource } from "../src/gate/floor";
-import { addChangelogEntry, CONFIG_FILE, changelogEntry, gateComparison, rewriteConfigText, writeGateRecord, type PromotedKnobs } from "../src/gate/record";
+import { addChangelogEntry, CHANGELOG_FILE, CONFIG_FILE, changelogEntry, gateComparison, gateRecordPath, rewriteConfigText, snapshotFiles, writeGateRecord, type PromotedKnobs } from "../src/gate/record";
 import type { GateRecord } from "../src/gate/schema";
 import { readNoiseFloors } from "../src/results/read";
 import { RESULT_FILES, type NoiseFloor } from "../src/results/schema";
@@ -263,8 +263,12 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Promotion, in an order where a failure halfway is loud and fixable: the
-  // config, then the holdout files unsealed, then the changelog.
+  // Promotion: the config, the holdout files unsealed, the record and the
+  // changelog. All or nothing: if any step fails, every file is put back as
+  // it was and the record says it wasn't promoted.
+  const recordPath = gateRecordPath(record);
+  const runDir = join(PROJECT_ROOT, "results", runs.candidateHoldout);
+  const restore = snapshotFiles([CONFIG_FILE, CHANGELOG_FILE, recordPath, ...Object.values(RESULT_FILES).map((f) => join(runDir, f))]);
   try {
     promote({ agentVersion: candidate.name, ...next });
     const stored = last.store.getRun(runs.candidateHoldout);
@@ -275,9 +279,13 @@ async function main(): Promise<void> {
     console.log(styleText(["green", "bold"], `\n✓ ${candidate.name} passed and is promoted. verifai.config.json now runs it; its holdout tries are readable.`));
     console.log(dim(`  Record: ${relative(PROJECT_ROOT, path)} · CHANGELOG.md has its entry.`));
   } catch (error) {
+    restore();
     writeGateRecord(record);
     await last.close();
-    fatal(`${candidate.name} passed, but promoting it broke: ${error instanceof Error ? error.message : String(error)}. Check verifai.config.json and CHANGELOG.md before running anything else.`);
+    fatal(
+      `${candidate.name} passed, but promoting it broke: ${error instanceof Error ? error.message : String(error)}. ` +
+        `Every file was put back, so ${promoted.agentVersion} stays promoted and the holdout tries stay sealed. Fix the cause and run the gate again (it reuses the finished runs).`,
+    );
   }
   await last.close();
 }
