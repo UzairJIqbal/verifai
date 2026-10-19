@@ -10,7 +10,8 @@ import { buildRunConfig, firstRequest, newRunId, runFingerprint } from "./plan";
 import { busyWaitMs, classifyFailure } from "./provider-errors";
 import { makeRedactor, REDACTED } from "./redact";
 import { costUsd } from "./runner";
-import { EvalStore } from "./store";
+import { countRemaining } from "./session";
+import { EvalStore, tryKey } from "./store";
 
 const config = loadConfig();
 const version = loadAgentVersion(config, "2026-03-15");
@@ -228,6 +229,31 @@ describe("budget", () => {
     expect(cached).toMatchObject({ calls: 0, fitsToday: true, days: 1 });
     const used = [{ ...providers[0], usedToday: { calls: 50, inputTokens: 150_000, cachedInputTokens: 0, outputTokens: 50_000 } }];
     expect(estimateBudget({ triesLeft: 1, cachedTries: 0, callsPerTry: 4, usagePerCall, providers: used }).providers[0].callsLeftToday).toBe(0);
+  });
+
+  // What the gate shows: tries the cache already holds cost nothing.
+  const tasks = [task, { ...task, id: "status-02" }];
+  const count = (cachedKeys: Set<string>, finished = new Set<string>(), keyFor = (t: typeof task, n: number): string | null => tryKey(t.id, n)) =>
+    countRemaining({ tasks, triesPerTask: 2, finished, keyFor, isCached: (key) => cachedKeys.has(key) });
+  const callsFor = (r: { left: number; cached: number }) =>
+    estimateBudget({ triesLeft: r.left, cachedTries: r.cached, callsPerTry: 4, usagePerCall, providers }).calls;
+
+  it("estimates 0 calls for a fully cached run", () => {
+    const all = new Set(tasks.flatMap((t) => [tryKey(t.id, 1), tryKey(t.id, 2)]));
+    const r = count(all);
+    expect(r).toEqual({ left: 4, cached: 4 });
+    expect(callsFor(r)).toBe(0);
+  });
+
+  it("estimates only the missing tries of a half-cached run", () => {
+    const r = count(new Set([tryKey("status-01", 1), tryKey("status-02", 1)]));
+    expect(r).toEqual({ left: 4, cached: 2 });
+    expect(callsFor(r)).toBe(8);
+  });
+
+  it("skips finished tries and counts an unknown request as not cached", () => {
+    expect(count(new Set(), new Set([tryKey("status-01", 1)]))).toEqual({ left: 3, cached: 0 });
+    expect(count(new Set([tryKey("status-01", 1)]), new Set(), () => null)).toEqual({ left: 4, cached: 0 });
   });
 });
 

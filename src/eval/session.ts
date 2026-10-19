@@ -222,22 +222,46 @@ export async function openSession(args: { useCache: boolean; smoke: boolean; pla
   };
 }
 
-// The tries a run still has to do, and how many of those the cache answers.
-export function remainingTries(s: Session, runId: string | null): { left: number; cached: number } {
-  const finished = runId === null ? new Set<string>() : s.store.finishedTries(runId);
-  const remaining = s.tasks.flatMap((task) =>
-    Array.from({ length: s.runConfig.triesPerTask }, (_, i) => ({ task, tryNumber: i + 1 })).filter((t) => !finished.has(tryKey(t.task.id, t.tryNumber))),
+/**
+ * The tries a run still has, and how many of them the cache already holds,
+ * so the estimate counts only the calls that will really be sent. A try is
+ * cached when its first model call is: with the same prompt, tools and
+ * conversation at temperature 0, every call after it replays too. `keyFor`
+ * gives null when a try's request can't be known yet (exemplars waiting on
+ * an embedding); that try counts as not cached.
+ */
+export function countRemaining(args: {
+  tasks: Task[];
+  triesPerTask: number;
+  finished: Set<string>;
+  keyFor: (task: Task, tryNumber: number) => string | null;
+  isCached: (key: string) => boolean;
+}): { left: number; cached: number } {
+  const remaining = args.tasks.flatMap((task) =>
+    Array.from({ length: args.triesPerTask }, (_, i) => ({ task, tryNumber: i + 1 })).filter((t) => !args.finished.has(tryKey(t.task.id, t.tryNumber))),
   );
-  const { config } = s;
-  const cached = s.useCache
-    ? remaining.filter(({ task, tryNumber }) => {
-        const version = knownVersionFor(s, task);
-        if (version === null) return false;
-        const key = cacheKey({ model: config.agent.model, temperature: config.agent.temperature, reasoningEffort: config.agent.reasoningEffort, request: firstRequest(version, task), tryNumber });
-        return s.store.cacheGet(key) !== null;
-      }).length
-    : 0;
+  const cached = remaining.filter(({ task, tryNumber }) => {
+    const key = args.keyFor(task, tryNumber);
+    return key !== null && args.isCached(key);
+  }).length;
   return { left: remaining.length, cached };
+}
+
+export function remainingTries(s: Session, runId: string | null): { left: number; cached: number } {
+  const { config } = s;
+  return countRemaining({
+    tasks: s.tasks,
+    triesPerTask: s.runConfig.triesPerTask,
+    finished: runId === null ? new Set<string>() : s.store.finishedTries(runId),
+    keyFor: (task, tryNumber) => {
+      const version = knownVersionFor(s, task);
+      return version === null
+        ? null
+        : cacheKey({ model: config.agent.model, temperature: config.agent.temperature, reasoningEffort: config.agent.reasoningEffort, request: firstRequest(version, task), tryNumber });
+    },
+    // With the cache off nothing replays, so every try is sent.
+    isCached: (key) => s.useCache && s.store.cacheGet(key) !== null,
+  });
 }
 
 const withExemplars = (s: Session, task: Task, query: number[], entries: Exemplar[]): AgentVersion => ({

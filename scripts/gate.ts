@@ -11,7 +11,7 @@ import { join, relative } from "node:path";
 import { styleText } from "node:util";
 import { loadConfig, PROJECT_ROOT, type Config } from "../src/config";
 import { knobsLabel, knobsOf, type AgentKnobs } from "../src/agent/versions";
-import { ask, budgetFor, dim, embeddingsToSend, executeRun, fatal, n, openSession, type Session, type SessionPlan } from "../src/eval/session";
+import { ask, budgetFor, dim, embeddingsToSend, executeRun, fatal, n, openSession, remainingTries, type Session, type SessionPlan } from "../src/eval/session";
 import { runFingerprint } from "../src/eval/plan";
 import type { RunConfig } from "../src/eval/store";
 import { candidateKnobs, describeChange, readCandidate, type Candidate } from "../src/gate/candidates";
@@ -57,7 +57,7 @@ function reusableRun(s: Session): string | null {
 
 // What a slot still has to spend, and (for dev) the newest noise floor
 // measured for its agent.
-type Estimate = { reuse: string | null; left: number; calls: number; embeddings: number; key: string; floor: FloorSource | null };
+type Estimate = { reuse: string | null; left: number; cached: number; calls: number; embeddings: number; key: string; floor: FloorSource | null };
 
 async function estimate(slot: Slot, floors: NoiseFloor[]): Promise<Estimate> {
   const s = await openSession({ useCache: true, smoke: false, plan: slot.plan });
@@ -65,14 +65,14 @@ async function estimate(slot: Slot, floors: NoiseFloor[]): Promise<Estimate> {
     const key = agentKey(s.runConfig);
     const floor = slot.split === "dev" ? newestFloorFor(key, floors, (runId) => s.store.getRun(runId)?.config ?? null) : null;
     const reuse = reusableRun(s);
-    if (reuse !== null) return { reuse, left: 0, calls: 0, embeddings: 0, key, floor };
+    if (reuse !== null) return { reuse, left: 0, cached: 0, calls: 0, embeddings: 0, key, floor };
     const unfinished = s.store.findUnfinishedRun(runFingerprint(s.runConfig));
-    const done = unfinished === null ? 0 : s.store.finishedTries(unfinished.id).size;
-    const left = s.tasks.length * s.runConfig.triesPerTask - done;
-    // An upper bound: cached tries cost nothing, but with exemplars the cache
-    // can't be checked before the embeddings, so they're counted here.
-    const budget = budgetFor(s, left, 0);
-    return { reuse: null, left, calls: budget.calls, embeddings: embeddingsToSend(s), key, floor };
+    // Tries the cache holds cost nothing (v1's holdout tries on a new dataset
+    // version, say). With exemplars a try's prompt isn't known until its
+    // embedding is, so those count as sent: an upper bound.
+    const { left, cached } = remainingTries(s, unfinished?.id ?? null);
+    const budget = budgetFor(s, left, cached);
+    return { reuse: null, left, cached, calls: budget.calls, embeddings: embeddingsToSend(s), key, floor };
   } finally {
     await s.close();
   }
@@ -176,13 +176,13 @@ async function main(): Promise<void> {
     const e = estimates[i];
     console.log(
       `  ${labels[slot.id].padEnd(14)} ${
-        e.reuse ? dim(`already run: ${e.reuse}`) : `${e.left} tries to go · up to ~${n(e.calls)} agent calls${e.embeddings > 0 ? ` · 1 embedding call (${e.embeddings} messages)` : ""}`
+        e.reuse ? dim(`already run: ${e.reuse}`) : `${e.left} tries to go${e.cached > 0 ? ` (${e.cached} cached, free)` : ""} · ~${n(e.calls)} agent calls${e.embeddings > 0 ? ` · 1 embedding call (${e.embeddings} messages)` : ""}`
       }`,
     );
   });
   const totalCalls = estimates.reduce((a, e) => a + e.calls, 0);
   const totalEmbed = estimates.filter((e) => e.embeddings > 0).length;
-  console.log(`  In all: up to ~${n(totalCalls)} agent calls${totalEmbed > 0 ? ` and ${totalEmbed} embedding call(s)` : ""} · 0 judge calls. It stops cleanly at the daily limit; \`pnpm gate ${candidate.name}\` carries on.\n`);
+  console.log(`  In all: ~${n(totalCalls)} agent calls${totalEmbed > 0 ? ` and ${totalEmbed} embedding call(s)` : ""} · 0 judge calls. It stops cleanly at the daily limit; \`pnpm gate ${candidate.name}\` carries on.\n`);
 
   if (totalCalls > 0 || totalEmbed > 0) {
     if (!process.stdin.isTTY) fatal(`pnpm gate asks before spending calls, so run it in a terminal.`);
