@@ -23,9 +23,17 @@ const RUN_ID = /^[A-Za-z0-9_-]+$/;
 
 export type RunListing = { runs: Report[]; problems: string[] };
 
+// `sealed` is a holdout run whose version hasn't passed the gate: outcomes only.
 export type RunFiles =
-  | { report: Report; split: "dev"; trials: Trial[] }
-  | { report: Report; split: "holdout"; trials: SealedTrial[] };
+  | { report: Report; sealed: false; trials: Trial[] }
+  | { report: Report; sealed: true; trials: SealedTrial[] };
+
+export const isSealed = (report: Report): boolean => report.split === "holdout" && report.promotedAs === null;
+
+// A dev run's tries, or null. The judge, labelling and review read only these:
+// a promoted holdout run is readable, but nothing is ever fixed from it.
+export const devTrials = (files: RunFiles | null): Trial[] | null =>
+  files === null || files.sealed || files.report.split !== "dev" ? null : files.trials;
 
 function readJson(path: string, label: string): unknown {
   try {
@@ -47,7 +55,8 @@ export function listRuns(): RunListing {
   const runs: Report[] = [];
   const problems: string[] = [];
   for (const entry of readdirSync(/*turbopackIgnore: true*/ RESULTS_DIR, { withFileTypes: true })) {
-    if (!entry.isDirectory() || !RUN_ID.test(entry.name)) continue;
+    // results/gates/ holds gate records, not a run.
+    if (!entry.isDirectory() || !RUN_ID.test(entry.name) || entry.name === "gates") continue;
     try {
       runs.push(readReport(entry.name));
     } catch (error) {
@@ -78,9 +87,9 @@ export function readRun(runId: string): RunFiles | null {
       if (!parsed.success) throw new Error(`${label} line ${i + 1} doesn't match the expected shape:\n${z.prettifyError(parsed.error)}`);
       return parsed.data;
     });
-  return report.split === "holdout"
-    ? { report, split: "holdout", trials: parseLines(sealedTrialSchema) }
-    : { report, split: "dev", trials: parseLines(trialSchema) };
+  return isSealed(report)
+    ? { report, sealed: true, trials: parseLines(sealedTrialSchema) }
+    : { report, sealed: false, trials: parseLines(trialSchema) };
 }
 
 export type NoiseFloors = { floors: Map<string, NoiseFloor>; problems: string[] };
@@ -138,6 +147,8 @@ export function configDifferences(a: Report, b: Report): string[] {
   check("reasoning", a.agent.reasoningEffort, b.agent.reasoningEffort);
   check("prompt", a.agent.promptVersion, b.agent.promptVersion);
   check("tools", a.agent.toolDescriptionsVersion, b.agent.toolDescriptionsVersion);
+  check("validation", a.agent.validation ?? "none", b.agent.validation ?? "none");
+  check("exemplars", a.agent.exemplars ? "on" : "off", b.agent.exemplars ? "on" : "off");
   check("max steps", a.agent.maxSteps, b.agent.maxSteps);
   check("tries per task", a.triesPerTask, b.triesPerTask);
   check("cache", a.useCache ? "on" : "off", b.useCache ? "on" : "off");
@@ -153,6 +164,6 @@ export function compareRunFiles(a: RunFiles, b: RunFiles, floors: Map<string, No
   const floor = floorFor(a.report, b.report, floors);
   const measured = [floors.get(a.report.configKey), floors.get(b.report.configKey)].filter((f): f is NoiseFloor => f !== undefined);
   const noise = widestNoise(measured.map((f) => ({ overall: f.overall, byCategory: f.byCategory })));
-  const rows = (r: RunFiles) => (r.split === "dev" ? r.trials.map(outcomeRow) : r.trials.map(outcomeRow));
+  const rows = (r: RunFiles) => (r.sealed ? r.trials.map(outcomeRow) : r.trials.map(outcomeRow));
   return { a, b, comparison: compareRuns(rows(a), rows(b), noise), floor, differences: configDifferences(a.report, b.report) };
 }

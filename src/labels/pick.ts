@@ -3,7 +3,7 @@
 // rubric now in the config: a holdout trial is never shown here, and a trial
 // the judge couldn't read has no verdict to agree with.
 import { createHash } from "node:crypto";
-import { listRuns, readRun } from "../results/read";
+import { devTrials, listRuns, readRun } from "../results/read";
 import type { Trial } from "../results/schema";
 import { readLabels, recordSnapshots, type LabelFiles, LABEL_FILES } from "./files";
 import { trialKey, type Label, type TrialRef } from "./schema";
@@ -39,10 +39,11 @@ export function labellingPool(rubricVersion: string): Pool {
       problems.push(error instanceof Error ? error.message : String(error));
       continue;
     }
-    if (files === null || files.split !== "dev") continue;
-    const ready = files.trials.filter((t) => isLabellable(t, rubricVersion));
+    const devTries = devTrials(files);
+    if (devTries === null) continue;
+    const ready = devTries.filter((t) => isLabellable(t, rubricVersion));
     if (ready.length === 0) {
-      const judgedOther = files.trials.some((t) => t.judge?.status === "judged" && t.judge.rubricVersion !== rubricVersion);
+      const judgedOther = devTries.some((t) => t.judge?.status === "judged" && t.judge.rubricVersion !== rubricVersion);
       waiting.push({
         runId: report.runId,
         reason: judgedOther ? `judged with another rubric; \`pnpm judge ${report.runId}\` judges it with ${rubricVersion}` : `\`pnpm claims ${report.runId}\` and \`pnpm judge ${report.runId}\` haven't both read it`,
@@ -65,8 +66,8 @@ export const nextToLabel = (pool: Pool, labels: Label[]): Labellable | null => {
 export function snapshotLabelledTrials(runId: string, now: Date, files: LabelFiles = LABEL_FILES): number {
   const labelled = new Set(readLabels(files).filter((l) => l.runId === runId).map(trialKey));
   if (labelled.size === 0) return 0;
-  const run = readRun(runId);
-  if (run === null || run.split !== "dev") return 0;
-  const trials = run.trials.filter((t) => labelled.has(trialKey({ runId, ...t })));
+  const devTries = devTrials(readRun(runId));
+  if (devTries === null) return 0;
+  const trials = devTries.filter((t) => labelled.has(trialKey({ runId, ...t })));
   return recordSnapshots(trials.map((t) => ({ runId, taskId: t.taskId, tryNumber: t.tryNumber, judge: t.judge, claims: t.claims })), now, files);
 }

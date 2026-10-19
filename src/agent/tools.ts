@@ -203,10 +203,18 @@ export const SHOP_TOOLS = {
   }),
 } satisfies Record<ToolName, ShopTool>;
 
+// A check run before a tool; see ./validation. Null lets the tool run.
+export type PreCheck = { tool: ToolName; check: (input: unknown) => ToolOutcome | null };
+
 // `offered` is the tools this agent version has. A call to one it wasn't given
 // fails like an unknown tool, so a version that drops a tool really drops it.
-export function runTool(ctx: ToolContext, name: string, input: unknown, offered: readonly ToolName[] = TOOL_NAMES): ToolOutcome {
+// `preCheck` is the version's validation step, if it has one.
+export function runTool(ctx: ToolContext, name: string, input: unknown, offered: readonly ToolName[] = TOOL_NAMES, preCheck: PreCheck | null = null): ToolOutcome {
   const known = offered.find((toolName) => toolName === name);
   if (!known) return fail(`There is no tool called ${name}. Available tools: ${offered.join(", ")}.`);
+  if (preCheck !== null && preCheck.tool === known) {
+    const stopped = preCheck.check(input);
+    if (stopped !== null) return stopped;
+  }
   return SHOP_TOOLS[known].execute(ctx, input);
 }

@@ -243,16 +243,16 @@ function ComparisonTable({ result, here }: { result: RunComparison; here: (categ
 function TaskTable({ result, category, here }: { result: RunComparison; category: string | null; here: (category?: string) => string }) {
   const { a, b } = result;
   const outcomes = (r: RunFiles) => {
-    const rows = r.split === "dev" ? r.trials.map(outcomeRow) : r.trials.map(outcomeRow);
+    const rows = r.sealed ? r.trials.map(outcomeRow) : r.trials.map(outcomeRow);
     return { byTask: new Map(taskOutcomes(rows).map((t) => [t.taskId, t])), category: new Map(rows.map((x) => [x.taskId, x.category])) };
   };
   const oa = outcomes(a);
   const ob = outcomes(b);
   const ids = [...oa.byTask.keys()].filter((id) => ob.byTask.has(id) && (category === null || oa.category.get(id) === category)).sort();
   const cell = "px-3 py-1 align-top whitespace-nowrap";
-  // A dev try links to its trajectory; a holdout one stays sealed.
+  // A readable try links to its trajectory; a sealed holdout one doesn't.
   const tries = (r: RunFiles, id: string, t: { successes: number; tries: number }) =>
-    r.split === "dev" ? (
+    !r.sealed ? (
       <Link href={`/runs/${r.report.runId}/${id}/1`} className="text-foreground hover:underline">
         {t.successes}/{t.tries}
       </Link>

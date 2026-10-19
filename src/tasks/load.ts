@@ -159,3 +159,47 @@ export function freezeHoldout(reason: string, options: { files?: TaskFiles; seed
   appendFileSync(/*turbopackIgnore: true*/ files.changelog, line);
   return { version, fingerprint, holdoutCounts };
 }
+
+// The next dataset version: v2 → v3.
+export const nextDatasetVersion = (version: string): string => {
+  const m = /^v(\d+)$/.exec(version);
+  if (!m) throw new Error(`The dataset version ${version} isn't like v2.`);
+  return `v${Number(m[1]) + 1}`;
+};
+
+// A free id in the category: one past the highest used on either split.
+export function nextTaskId(category: Category, files: TaskFiles = TASK_FILES): string {
+  const used = readTaskFile(files.tasks).tasks.filter((t) => t.category === category).map((t) => Number(t.id.slice(category.length + 1)));
+  const id = Math.max(0, ...used) + 1;
+  if (id > 99) throw new Error(`${category} has no ids left (ids are two digits).`);
+  return `${category}-${String(id).padStart(2, "0")}`;
+}
+
+/**
+ * Adds a regression task to dev and bumps the dataset version, since scores on
+ * different task sets aren't comparable. The task's reference calls must
+ * produce exactly its expected changes. Holdout is never touched, so its lock
+ * stays as it is; the changelog line says what was added and why.
+ */
+export function addDevTask(task: Task, reason: string, options: { files?: TaskFiles; seedPath?: string; now?: Date } = {}): { version: string } {
+  if (reason.trim() === "") throw new Error("Say why the task is being added.");
+  if (task.split !== "dev") throw new Error("A regression task goes to dev. Holdout tasks change only by re-freezing on purpose.");
+  if (!task.id.startsWith(`${task.category}-`)) throw new Error(`The id ${task.id} doesn't start with its category, ${task.category}.`);
+  const files = options.files ?? TASK_FILES;
+  const { version, tasks } = readTaskFile(files.tasks);
+  checkLock(files, tasks);
+  if (tasks.some((t) => t.id === task.id)) throw new Error(`${task.id} is already a task. Pick a free id.`);
+
+  const { trajectory, errors } = runReference(task, options.seedPath);
+  if (errors.length > 0) throw new Error(`Not added. A reference call failed: ${errors.join("; ")}`);
+  const verdict = gradeState(task, trajectory);
+  if (!verdict.pass) throw new Error(`Not added. Its expected changes don't match its reference calls: ${verdict.reason}`);
+
+  const next = nextDatasetVersion(version);
+  const lines = readFileSync(/*turbopackIgnore: true*/ files.tasks, "utf8").split("\n").filter((l, i) => i > 0 && l.trim() !== "");
+  writeFileSync(/*turbopackIgnore: true*/ files.tasks, [JSON.stringify({ dataset_version: next }), ...lines, JSON.stringify(taskSchema.parse(task))].join("\n") + "\n");
+  const day = (options.now ?? new Date()).toISOString().slice(0, 10);
+  if (!existsSync(/*turbopackIgnore: true*/ files.changelog)) writeFileSync(/*turbopackIgnore: true*/ files.changelog, "# Tasks changelog\n\nEvery change to the holdout, and why.\n\n");
+  appendFileSync(/*turbopackIgnore: true*/ files.changelog, `- ${day} · ${next} · dev task ${task.id} added (holdout unchanged). ${reason.trim()} Scores from ${version} and ${next} are not comparable.\n`);
+  return { version: next };
+}

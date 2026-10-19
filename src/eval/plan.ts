@@ -22,8 +22,11 @@ export function buildRunConfig(args: {
   tasks: Task[];
   useCache: boolean;
   smoke: boolean;
+  // The exemplar store, when the version uses one.
+  exemplars?: { storeHash: string; entries: number } | null;
 }): RunConfig {
   const { config, version } = args;
+  if (version.exemplars && !args.exemplars) throw new Error("This version uses exemplars, but no exemplar store was given for the run.");
   return {
     agent: {
       model: config.agent.model,
@@ -39,6 +42,10 @@ export function buildRunConfig(args: {
     },
     promptVersion: version.promptVersion,
     toolDescriptionsVersion: version.toolDescriptionsVersion,
+    ...(version.validation !== null ? { validation: version.validation } : {}),
+    ...(version.exemplars && args.exemplars
+      ? { exemplars: { ...args.exemplars, embeddingModel: config.embedding.model, dimensions: config.embedding.dimensions } }
+      : {}),
     datasetVersion: args.datasetVersion,
     split: args.split,
     smoke: args.smoke,

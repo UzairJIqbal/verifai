@@ -5,7 +5,9 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { writeShop } from "../shop/seed";
 import { gradeState } from "../graders/state";
 import { runReference } from "../eval/conversation";
-import { freezeHoldout, loadTasks, TASK_FILES, type TaskFiles } from "./load";
+import { addDevTask, freezeHoldout, loadTasks, nextTaskId, TASK_FILES, type TaskFiles } from "./load";
+import { makeDraft, readDraft, writeDraft } from "./draft";
+import { readdirSync, statSync } from "node:fs";
 
 const dir = mkdtempSync(join(tmpdir(), "verifai-tasks-test-"));
 const seedPath = join(dir, "shop.db");
@@ -102,5 +104,70 @@ describe("freezeHoldout", () => {
     all[n - 1] = all[n - 1].replace('"cancelled"', '"shipped"');
     writeLines(all);
     expect(() => freezeHoldout("test", { files, seedPath })).toThrow(/Not frozen/);
+  });
+});
+
+describe("regression tasks", () => {
+  const from = { runId: "r1", taskId: "cancel-01", tryNumber: 2, datasetVersion: "v2", failureCategory: "wrong-tool", reviewNote: "cancelled the wrong order" };
+
+  it("go to dev only, bump the dataset version and leave the holdout lock alone", () => {
+    const before = loadTasks({ files });
+    const source = before.tasks.find((t) => t.category === "cancel");
+    if (!source) throw new Error("no dev cancel task");
+    const id = nextTaskId("cancel", files);
+    const task = { ...source, id, first_message: `${source.first_message} Thanks!`, note: "Same cancel, asked differently." };
+    const lock = readFileSync(files.lock, "utf8");
+    expect(() => addDevTask({ ...task, split: "holdout" }, "x", { files, seedPath })).toThrow(/goes to dev/);
+    expect(() => addDevTask({ ...task, id: source.id }, "x", { files, seedPath })).toThrow(/already a task/);
+    const { version } = addDevTask(task, "test add", { files, seedPath, now: new Date("2026-01-02T00:00:00Z") });
+    const after = loadTasks({ files });
+    expect(version).toBe(`v${Number(before.version.slice(1)) + 1}`);
+    expect(after.version).toBe(version);
+    expect(after.tasks.map((t) => t.id)).toContain(id);
+    expect(after.holdoutCounts).toEqual(before.holdoutCounts);
+    expect(readFileSync(files.lock, "utf8")).toBe(lock);
+    expect(readFileSync(files.changelog, "utf8")).toContain(`2026-01-02 · ${version} · dev task ${id} added`);
+  });
+
+  it("refuse a task whose expected changes its reference calls don't produce", () => {
+    const source = loadTasks({ files }).tasks.find((t) => t.expected.changes.length > 0);
+    if (!source) throw new Error("no dev task with changes");
+    expect(() => addDevTask({ ...source, id: nextTaskId(source.category, files), expected: { ...source.expected, changes: [] } }, "x", { files, seedPath })).toThrow(/Not added/);
+  });
+
+  it("start as an unfinished draft that can't be added until it's edited", () => {
+    const drafts = join(dir, "drafts");
+    const source = loadTasks({ files }).tasks.find((t) => t.id === "cancel-01");
+    if (!source) throw new Error("no cancel-01");
+    const draft = makeDraft(source, "cancel-90", from);
+    writeDraft(draft, drafts);
+    expect(() => writeDraft(draft, drafts)).toThrow(/already exists/);
+    expect(() => readDraft("cancel-90", source, drafts)).toThrow(/EDIT ME/);
+    writeFileSync(join(drafts, "cancel-90.json"), JSON.stringify({ ...draft, note: "Checks the cancel." }));
+    expect(() => readDraft("cancel-90", source, drafts)).toThrow(/same first message/);
+    writeFileSync(join(drafts, "cancel-90.json"), JSON.stringify({ ...draft, note: "Checks the cancel.", first_message: "Cancel 1005 please, esha.qureshi@example.com" }));
+    const { task, from: back } = readDraft("cancel-90", source, drafts);
+    expect(task).not.toHaveProperty("_from");
+    expect(back).toEqual(from);
+  });
+});
+
+// The gate is the only caller allowed to ask for holdout tasks.
+describe("holdout access", () => {
+  const root = join(__dirname, "../..");
+  const files = (d: string): string[] =>
+    readdirSync(d).flatMap((f) => {
+      const p = join(d, f);
+      if (statSync(p).isDirectory()) return f === "node_modules" || f.startsWith(".") ? [] : files(p);
+      return /\.(ts|tsx)$/.test(f) ? [p] : [];
+    });
+
+  it("asks for holdout tasks only in scripts/gate.ts (and the loader's own tests)", () => {
+    const callers = ["src", "scripts", "app"]
+      .flatMap((d) => files(join(root, d)))
+      .filter((p) => /gating:\s*true/.test(readFileSync(p, "utf8")))
+      .map((p) => p.slice(root.length + 1))
+      .sort();
+    expect(callers).toEqual(["scripts/gate.ts", "src/tasks/load.test.ts"]);
   });
 });

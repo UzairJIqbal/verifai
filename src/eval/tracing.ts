@@ -95,13 +95,20 @@ function outputsOf(steps: Step[], index: number): { text: string; toolCalls: { n
 }
 
 function traceTrial(runId: string, config: RunConfig, trial: RecordedTrial, task: Task, tracesUrl: string): string {
-  const versions = { prompt: config.promptVersion, tools: config.toolDescriptionsVersion, dataset: config.datasetVersion };
+  const versions = {
+    prompt: config.promptVersion,
+    tools: config.toolDescriptionsVersion,
+    dataset: config.datasetVersion,
+    ...(config.validation ? { validation: config.validation } : {}),
+    ...(config.exemplars ? { exemplars: config.exemplars.storeHash } : {}),
+  };
+  const knobs = [...(config.validation ? [`validation:${config.validation}`] : []), ...(config.exemplars ? ["exemplars"] : [])];
   return propagateAttributes(
     {
       traceName: `${trial.taskId} · try ${trial.tryNumber}`,
       sessionId: runId,
-      version: `prompt ${versions.prompt} · tools ${versions.tools}`,
-      tags: [`run:${runId}`, `task:${trial.taskId}`, `try:${trial.tryNumber}`, `prompt:${versions.prompt}`, `tools:${versions.tools}`, `dataset:${versions.dataset}`, ...(config.smoke ? ["smoke"] : []), trial.status],
+      version: `prompt ${versions.prompt} · tools ${versions.tools}${knobs.length > 0 ? ` · ${knobs.join(" · ")}` : ""}`,
+      tags: [`run:${runId}`, `task:${trial.taskId}`, `try:${trial.tryNumber}`, `prompt:${versions.prompt}`, `tools:${versions.tools}`, `dataset:${versions.dataset}`, ...knobs, ...(config.smoke ? ["smoke"] : []), trial.status],
       metadata: { run: runId, task: trial.taskId, try: String(trial.tryNumber), ...versions, model: config.agent.model },
     },
     () => {

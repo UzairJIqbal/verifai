@@ -14,6 +14,7 @@ const PLACES = [
   { href: "/labelling", label: "Labelling", localOnly: true },
   { href: "/review", label: "Review", localOnly: true },
   { href: "/failures", label: "Failures", localOnly: false },
+  { href: "/gates", label: "Gates", localOnly: false },
 ] as const;
 
 export function NavLinks({ showLocalOnly }: { showLocalOnly: boolean }) {

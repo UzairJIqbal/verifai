@@ -44,7 +44,7 @@ function Run({ runId }: { runId: string }) {
   const { report: r } = files;
   const t = r.totals;
   const rows: TrialRow[] =
-    files.split === "holdout"
+    files.sealed
       ? files.trials.map((x) => ({ taskId: x.taskId, tryNumber: x.tryNumber, category: x.category, difficulty: x.difficulty, status: x.status, why: null, flags: [], tags: [], detail: null }))
       : files.trials.map((x) => ({
           taskId: x.taskId,
@@ -142,17 +142,17 @@ function Run({ runId }: { runId: string }) {
         </p>
       )}
 
-      {r.graders && <GraderReportSection runId={r.runId} g={r.graders} linked={files.split !== "holdout"} />}
-      {r.hallucination && <HallucinationSection runId={r.runId} h={r.hallucination} linked={files.split !== "holdout"} />}
+      {r.graders && <GraderReportSection runId={r.runId} g={r.graders} linked={!files.sealed} />}
+      {r.hallucination && <HallucinationSection runId={r.runId} h={r.hallucination} linked={!files.sealed} />}
       {/* The judge never reads holdout or smoke runs. */}
-      {!r.smoke && files.split !== "holdout" && <JudgeSection runId={r.runId} j={r.judge} />}
+      {!r.smoke && r.split !== "holdout" && <JudgeSection runId={r.runId} j={r.judge} />}
 
-      {files.split === "holdout" && (
+      {files.sealed && (
         <div className="mb-4">
           <HoldoutLock />
         </div>
       )}
-      <TrialTable runId={r.runId} rows={rows} sealed={files.split === "holdout"} />
+      <TrialTable runId={r.runId} rows={rows} sealed={files.sealed} />
     </>
   );
 }

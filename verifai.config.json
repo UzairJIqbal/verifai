@@ -55,8 +55,20 @@
     "concurrency": 2,
     "smokeTasks": ["cancel-01", "refund-01", "address-02", "status-02", "transfer-01"]
   },
+  "agentVersion": "v1",
   "promptVersion": "v1",
   "toolDescriptionsVersion": "v1",
+  "validation": null,
+  "exemplars": false,
+  "embedding": {
+    "provider": "gemini",
+    "model": "gemini-embedding-001",
+    "dimensions": 768,
+    "nearDuplicateSimilarity": 0.9
+  },
+  "gate": {
+    "maxCategoryDropPoints": 5
+  },
   "judge": {
     "provider": "gemini",
     "model": "gemini-3.5-flash-lite",

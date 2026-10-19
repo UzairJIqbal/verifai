@@ -11,6 +11,7 @@ import { gradeTry, outcomePassed } from "../graders";
 import type { ShopFacts } from "../graders/steps";
 import { stepSchema, type Step, type RecordedTrial, type TrialStatus } from "../results/schema";
 import type { Task } from "../tasks/schema";
+import type { AgentVersion } from "../agent/versions";
 import { cacheKey, decodeCachedCall, encodeCachedCall } from "./cache";
 import { countedTokens, estimateTokens, type Clock, type Pacer, type Ticket } from "./pacer";
 import { BUSY_RETRIES, busyWaitMs, classifyFailure } from "./provider-errors";
@@ -67,6 +68,9 @@ export type RunnerOptions = {
   pool: PoolProvider[];
   // The agent as configured; the runner picks the model for each call.
   setup: Omit<AgentSetup, "model" | "provider" | "wrapCall">;
+  // A version whose prompt depends on the task (exemplars picked for it);
+  // without it every task gets setup.version.
+  versionFor?: (task: Task) => AgentVersion;
   tasks: Task[];
   // The seeded shop's ids and orders, which the trajectory graders check against.
   shop: ShopFacts;
@@ -303,7 +307,7 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
     try {
       // The wrapper picks the model for every call; the first in the pool is
       // only the setup's placeholder.
-      const setup: AgentSetup = { ...o.setup, model: o.pool[0].model, provider: o.pool[0].provider, wrapCall };
+      const setup: AgentSetup = { ...o.setup, version: o.versionFor?.(task) ?? o.setup.version, model: o.pool[0].model, provider: o.pool[0].provider, wrapCall };
       const trajectory = await runTaskConversation(setup, task, (e) => events.push(e), o.seedPath);
       // Graders run outside the catch: one that throws stops the run loudly
       // rather than turning into an errored try.

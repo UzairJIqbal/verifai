@@ -52,7 +52,7 @@ function countByProvider(trials: Trial[]): Record<string, number> {
   return counts;
 }
 
-export function buildReport(run: StoredRun, trials: Trial[], finishedAt: string, tasks: Map<string, Task>): Report {
+export function buildReport(run: StoredRun, trials: Trial[], finishedAt: string, tasks: Map<string, Task>, promotedAs: string | null = null): Report {
   const c: RunConfig = run.config;
   const sum = (pick: (t: Trial) => number) => trials.reduce((total, t) => total + pick(t), 0);
   return reportSchema.parse({
@@ -74,7 +74,10 @@ export function buildReport(run: StoredRun, trials: Trial[], finishedAt: string,
       reasoningEffort: c.agent.reasoningEffort,
       promptVersion: c.promptVersion,
       toolDescriptionsVersion: c.toolDescriptionsVersion,
+      validation: c.validation ?? null,
+      exemplars: c.exemplars !== undefined,
     },
+    promotedAs,
     totals: {
       trials: trials.length,
       passed: trials.filter((t) => t.status === "passed").length,
@@ -254,7 +257,8 @@ export function renderMarkdown(report: Report, trials: Trial[]): string {
     `# ${report.smoke ? "Smoke run" : "Run"} ${report.runId}`,
     "",
     `- Split: ${report.split}${report.smoke ? " (smoke)" : ""} · dataset ${report.datasetVersion} · ${report.taskCount} tasks × ${report.triesPerTask} tries = ${t.trials} tries`,
-    `- Agent: ${a.model} from ${a.pool.join(", then ")} · temperature ${a.temperature} · reasoning ${a.reasoningEffort} · prompt ${a.promptVersion} · tools ${a.toolDescriptionsVersion} · max ${a.maxSteps} steps`,
+    `- Agent: ${a.model} from ${a.pool.join(", then ")} · temperature ${a.temperature} · reasoning ${a.reasoningEffort} · prompt ${a.promptVersion} · tools ${a.toolDescriptionsVersion}${a.validation ? ` · validation ${a.validation}` : ""}${a.exemplars ? " · exemplars" : ""} · max ${a.maxSteps} steps`,
+    ...(report.split === "holdout" ? [`- Holdout tries: ${report.promotedAs === null ? "sealed (outcomes only) until this version passes the gate" : `readable: promoted as agent ${report.promotedAs}`}`] : []),
     `- Configuration key: ${report.configKey}`,
     `- Response cache: ${report.useCache ? "on" : "off"}`,
     `- Started ${report.createdAt} · finished ${report.finishedAt}`,
@@ -288,12 +292,15 @@ export function writeResults(
   finishedAt: string,
   redact: Redact,
   dir: string = RESULTS_DIR,
+  // Set only by the gate, when it promotes this holdout run's version.
+  promotedAs: string | null = null,
 ): { dir: string; report: Report } {
   const trials = withTaskInfo(recorded, tasks);
-  const report = buildReport(run, trials, finishedAt, tasks);
+  const report = buildReport(run, trials, finishedAt, tasks, promotedAs);
   const runDir = join(dir, run.id);
   mkdirSync(runDir, { recursive: true });
-  const lines = trials.map((trial) => JSON.stringify(report.split === "holdout" ? sealTrial(trial) : trialSchema.parse(trial)));
+  const sealed = report.split === "holdout" && report.promotedAs === null;
+  const lines = trials.map((trial) => JSON.stringify(sealed ? sealTrial(trial) : trialSchema.parse(trial)));
   writeFileSync(join(runDir, RESULT_FILES.json), redact(`${JSON.stringify(report, null, 2)}\n`));
   writeFileSync(join(runDir, RESULT_FILES.markdown), redact(renderMarkdown(report, trials)));
   writeFileSync(join(runDir, RESULT_FILES.trials), redact(lines.length === 0 ? "" : `${lines.join("\n")}\n`));

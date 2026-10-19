@@ -284,7 +284,13 @@ export const reportSchema = z.object({
     reasoningEffort: z.enum(REASONING_EFFORTS),
     promptVersion: z.string(),
     toolDescriptionsVersion: z.string(),
+    // Absent from runs made before validation steps and exemplars existed.
+    validation: z.string().nullable().default(null),
+    exemplars: z.boolean().default(false),
   }),
+  // A holdout run's tries stay sealed (outcome only) until its version passes
+  // the gate; then this names the agent version and the tries are readable.
+  promotedAs: z.string().nullable().default(null),
   totals: z.object({
     trials: count,
     passed: count,
