@@ -199,14 +199,25 @@ export function addDevTask(task: Task, reason: string, options: { files?: TaskFi
   if (!verdict.pass) throw new Error(`Not added. Its expected changes don't match its reference calls: ${verdict.reason}`);
 
   const next = nextDatasetVersion(version);
-  const lines = readFileSync(/*turbopackIgnore: true*/ files.tasks, "utf8").split("\n").filter((l, i) => i > 0 && l.trim() !== "");
+  const before = readFileSync(/*turbopackIgnore: true*/ files.tasks, "utf8");
+  const lines = before.split("\n").filter((l, i) => i > 0 && l.trim() !== "");
   // Written beside it, then renamed over it: a crash halfway leaves the old
   // file whole, never a cut-off one.
-  const temp = `${files.tasks}.tmp`;
-  writeFileSync(/*turbopackIgnore: true*/ temp, [JSON.stringify({ dataset_version: next }), ...lines, JSON.stringify(taskSchema.parse(task))].join("\n") + "\n");
-  renameSync(/*turbopackIgnore: true*/ temp, files.tasks);
+  const replaceTasks = (text: string) => {
+    const temp = `${files.tasks}.tmp`;
+    writeFileSync(/*turbopackIgnore: true*/ temp, text);
+    renameSync(/*turbopackIgnore: true*/ temp, files.tasks);
+  };
+  replaceTasks([JSON.stringify({ dataset_version: next }), ...lines, JSON.stringify(taskSchema.parse(task))].join("\n") + "\n");
   const day = (options.now ?? new Date()).toISOString().slice(0, 10);
-  if (!existsSync(/*turbopackIgnore: true*/ files.changelog)) writeFileSync(/*turbopackIgnore: true*/ files.changelog, "# Tasks changelog\n\nEvery change to the holdout, and why.\n\n");
-  appendFileSync(/*turbopackIgnore: true*/ files.changelog, `- ${day} · ${next} · dev task ${task.id} added (holdout unchanged). ${reason.trim()} Scores from ${version} and ${next} are not comparable.\n`);
+  // The task and its changelog line go in together: if the line can't be
+  // written, the old dataset is put back and nothing was added.
+  try {
+    if (!existsSync(/*turbopackIgnore: true*/ files.changelog)) writeFileSync(/*turbopackIgnore: true*/ files.changelog, "# Tasks changelog\n\nEvery change to the holdout, and why.\n\n");
+    appendFileSync(/*turbopackIgnore: true*/ files.changelog, `- ${day} · ${next} · dev task ${task.id} added (holdout unchanged). ${reason.trim()} Scores from ${version} and ${next} are not comparable.\n`);
+  } catch (error) {
+    replaceTasks(before);
+    throw new Error(`Not added: the tasks changelog couldn't be written (${error instanceof Error ? error.message : String(error)}). The dataset is back to ${version}.`);
+  }
   return { version: next };
 }

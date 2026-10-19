@@ -129,6 +129,18 @@ describe("regression tasks", () => {
     expect(readFileSync(files.changelog, "utf8")).toContain(`2026-01-02 · ${version} · dev task ${id} added`);
   });
 
+  it("put the dataset back when the changelog line can't be written", () => {
+    const source = loadTasks({ files }).tasks.find((t) => t.category === "cancel");
+    if (!source) throw new Error("no dev cancel task");
+    const tasksBefore = readFileSync(files.tasks, "utf8");
+    // A directory where the changelog should be: appending to it fails.
+    const broken = { ...files, changelog: mkdtempSync(join(tmpdir(), "verifai-changelog-")) };
+    const task = { ...source, id: nextTaskId("cancel", files), first_message: `${source.first_message} Please.` };
+    expect(() => addDevTask(task, "x", { files: broken, seedPath })).toThrow(/Not added: the tasks changelog/);
+    expect(readFileSync(files.tasks, "utf8")).toBe(tasksBefore);
+    rmSync(broken.changelog, { recursive: true, force: true });
+  });
+
   it("skip ids held by drafts not yet added", () => {
     const first = nextTaskId("cancel", files);
     const n = Number(first.slice("cancel-".length));
