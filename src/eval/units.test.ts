@@ -241,10 +241,15 @@ describe("budget", () => {
 
   it("stops a provider by our count before a call would go past its allowance", () => {
     const cloudflare = config.agent.pool[1].freeTierLimits.daily;
-    // 300,000 input tokens is 9,545 neurons; a 10,000-token call adds 318.
+    // 300,000 input tokens is 9,545 neurons, leaving 455; 10,000 input tokens is 318.
     const used = { calls: 300, inputTokens: 300_000, cachedInputTokens: 0, outputTokens: 0 };
-    expect(dailyLimitReached(used, 10_000, cloudflare)).toBeNull();
-    expect(dailyLimitReached(used, 20_000, cloudflare)).toBe("9,545 of its 10,000 neurons today are used by our count");
+    const why = "9,545 of its 10,000 neurons today are used by our count";
+    expect(dailyLimitReached(used, { calls: 1, inputTokens: 10_000 }, 0, cloudflare)).toBeNull();
+    expect(dailyLimitReached(used, { calls: 1, inputTokens: 20_000 }, 0, cloudflare)).toBe(why);
+    // The reply counts too: 2,500 output tokens is another 170.
+    expect(dailyLimitReached(used, { calls: 1, inputTokens: 10_000 }, 2_500, cloudflare)).toBe(why);
+    // And so does a call already in flight.
+    expect(dailyLimitReached(used, { calls: 2, inputTokens: 20_000 }, 0, cloudflare)).toBe(why);
   });
 
   // What the gate shows: tries the cache already holds cost nothing.

@@ -17,19 +17,23 @@ export function dayStart(daily: FreeTierLimits["daily"], nowMs: number): number 
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
 
+// Calls sent but not yet recorded, counting the one about to go.
+export type PendingCalls = { calls: number; inputTokens: number };
+
 /**
- * Why a call of about `guessTokens` mustn't be sent, or null if it may be. Our
- * own count is the limit, not the provider's refusal: Cloudflare kept answering
- * at 2.6 times its free allowance and never said it was used up.
+ * Why the pending calls mustn't all be sent, or null if they may be. Each is
+ * counted with its guessed input and an average reply. Our own count is the
+ * limit, not the provider's refusal: Cloudflare kept answering at 2.6 times its
+ * free allowance and never said it was used up.
  */
-export function dailyLimitReached(usedToday: ProviderUsage, guessTokens: number, daily: FreeTierLimits["daily"]): string | null {
+export function dailyLimitReached(usedToday: ProviderUsage, pending: PendingCalls, outputPerCall: number, daily: FreeTierLimits["daily"]): string | null {
   const used = dailyUnits(usedToday, daily);
-  const next = dailyUnits({ inputTokens: guessTokens, cachedInputTokens: 0, outputTokens: 0 }, daily);
+  const next = dailyUnits({ inputTokens: pending.inputTokens, cachedInputTokens: 0, outputTokens: pending.calls * outputPerCall }, daily);
   if (used + next <= daily.allowance) return null;
   return `${Math.round(used).toLocaleString("en-US")} of its ${daily.allowance.toLocaleString("en-US")} ${daily.unit} today are used by our count`;
 }
 
-export type ProviderBudgetInput ={ provider: string; limits: FreeTierLimits; usedToday: ProviderUsage };
+export type ProviderBudgetInput = { provider: string; limits: FreeTierLimits; usedToday: ProviderUsage };
 
 export type BudgetInput = {
   triesLeft: number;

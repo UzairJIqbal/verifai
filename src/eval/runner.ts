@@ -12,6 +12,7 @@ import type { ShopFacts } from "../graders/steps";
 import { stepSchema, type Step, type RecordedTrial, type TrialStatus } from "../results/schema";
 import type { Task } from "../tasks/schema";
 import type { AgentVersion } from "../agent/versions";
+import type { PendingCalls } from "./budget";
 import { cacheKey, decodeCachedCall, encodeCachedCall } from "./cache";
 import { countedTokens, estimateTokens, type Clock, type Pacer, type Ticket } from "./pacer";
 import { BUSY_RETRIES, busyWaitMs, classifyFailure } from "./provider-errors";
@@ -58,10 +59,10 @@ export type PoolProvider = {
   // Limit errors in a row after which today's free limit counts as used up,
   // whatever they say; null to go by the wording alone.
   dailyAfterLimitErrors: number | null;
-  // Why a call of about this many tokens would go past today's free
-  // allowance by our own count, or null. Asked before every call, since a
-  // provider may keep answering past it (Cloudflare does).
-  dailyLimitReached: (guessTokens: number) => string | null;
+  // Why these calls would go past today's free allowance by our own count,
+  // or null. Asked before every call, since a provider may keep answering
+  // past it (Cloudflare does).
+  dailyLimitReached: (pending: PendingCalls) => string | null;
 };
 
 export type RunnerOptions = {
@@ -204,15 +205,34 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
   // provider still in play is at its per-minute limit, waits for the first.
   // Null if every one is cooling down; throws when none has any of today left.
   // A provider is used up for today when it says so or when our count does.
-  const pick = async (guess: number): Promise<{ member: PoolProvider; ticket: Ticket } | null> => {
-    for (const p of o.pool) {
-      if (exhausted.has(p.provider)) continue;
-      const why = p.dailyLimitReached(guess);
-      if (why === null) continue;
-      exhausted.add(p.provider);
-      const takesOver = o.pool.find((q) => !exhausted.has(q.provider));
-      o.onNotice(`${p.label}'s free limit for today is used up: ${why}${takesOver ? `; carrying on with ${takesOver.label}` : ""}.`);
+  // Calls sent to each provider and not yet recorded, so tries running side
+  // by side can't each take the last of its allowance.
+  const inFlight = new Map<string, PendingCalls>();
+  const usedUp = (p: PoolProvider, guess: number): boolean => {
+    const f = inFlight.get(p.provider) ?? { calls: 0, inputTokens: 0 };
+    const why = p.dailyLimitReached({ calls: f.calls + 1, inputTokens: f.inputTokens + guess });
+    if (why === null) return false;
+    exhausted.add(p.provider);
+    const takesOver = o.pool.find((q) => !exhausted.has(q.provider));
+    o.onNotice(`${p.label}'s free limit for today is used up: ${why}${takesOver ? `; carrying on with ${takesOver.label}` : ""}.`);
+    return true;
+  };
+  const book = (provider: string, guess: number, sign: 1 | -1) => {
+    const f = inFlight.get(provider) ?? { calls: 0, inputTokens: 0 };
+    inFlight.set(provider, { calls: f.calls + sign, inputTokens: f.inputTokens + sign * guess });
+  };
+  // Checked again once a slot is held, since waiting for it lets other tries send.
+  const take = (member: PoolProvider, ticket: Ticket, guess: number) => {
+    if (usedUp(member, guess)) {
+      ticket.settle(null);
+      return null;
     }
+    book(member.provider, guess, 1);
+    return { member, ticket };
+  };
+
+  const pick = async (guess: number): Promise<{ member: PoolProvider; ticket: Ticket } | null> => {
+    for (const p of o.pool) if (!exhausted.has(p.provider)) usedUp(p, guess);
     const open = o.pool.filter((p) => !exhausted.has(p.provider));
     if (open.length === 0) throw new StopRun("daily", `The free limit for today is used up on every provider in the pool (${labels}).`);
     const now = clock.now();
@@ -223,11 +243,11 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
     }
     for (const member of ready) {
       const ticket = member.pacer.tryReserve(guess);
-      if (ticket) return { member, ticket };
+      if (ticket) return take(member, ticket, guess);
     }
     const ticket = await ready[0].pacer.reserve(guess, stopping);
     if (ticket === null) throw abandon();
-    return { member: ready[0], ticket };
+    return take(ready[0], ticket, guess);
   };
 
   const runOne = async (task: Task, tryNumber: number): Promise<RecordedTrial> => {
@@ -257,7 +277,12 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
         const { member, ticket } = picked;
         const began = clock.now();
         try {
-          const result = await send(member.model);
+          let result;
+          try {
+            result = await send(member.model);
+          } finally {
+            book(member.provider, guess, -1);
+          }
           const latencyMs = Math.round(clock.now() - began);
           limitErrorsInARow.set(member.provider, 0);
           const counted = countedTokens(result.usage);

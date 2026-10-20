@@ -450,6 +450,9 @@ export async function executeRun(s: Session, args: { title: string; command: str
   const clock = makeClock();
   // Each starts from what its provider still counts from calls in the last minute.
   for (const m of config.agent.pool) s.pacers.set(m.provider, new Pacer(m.freeTierLimits, clock, store.recentCalls(m.provider, Date.now() - 60_000)));
+  // An average reply, held back for each call before it goes. None until
+  // there's history: the first 20 calls are counted by their input alone.
+  const outputPerCall = store.averageUsagePerCall(config.agent.pool.map((m) => m.provider))?.outputTokens ?? 0;
   const pool: PoolProvider[] = s.agents.map((a, i) => {
     const member = config.agent.pool[i];
     const pacer = s.pacers.get(a.provider);
@@ -461,9 +464,9 @@ export async function executeRun(s: Session, args: { title: string; command: str
       pacer,
       describeError: (error) => describeModelError(error, member, config.agent.stepTimeoutSeconds),
       dailyAfterLimitErrors: a.dailyAfterLimitErrors,
-      dailyLimitReached: (guess) => {
+      dailyLimitReached: (pending) => {
         const { daily } = member.freeTierLimits;
-        return dailyLimitReached(store.usageSince(a.provider, dayStart(daily, Date.now())), guess, daily);
+        return dailyLimitReached(store.usageSince(a.provider, dayStart(daily, Date.now())), pending, outputPerCall, daily);
       },
     };
   });

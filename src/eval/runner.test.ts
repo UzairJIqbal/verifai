@@ -8,6 +8,7 @@ import { loadConfig } from "../config";
 import { writeShop } from "../shop/seed";
 import { loadAgentVersion } from "../agent/versions";
 import { taskSchema, type Task } from "../tasks/schema";
+import type { PendingCalls } from "./budget";
 import { Pacer, type Clock } from "./pacer";
 import { buildRunConfig, runFingerprint } from "./plan";
 import { makeRedactor } from "./redact";
@@ -71,7 +72,7 @@ async function run(
   models: MockLanguageModelV4 | MockLanguageModelV4[],
   store: EvalStore,
   runId: string,
-  opts: { useCache?: boolean; notices?: string[]; stopAfterTries?: number; dailyLimitReached?: (provider: string) => string | null } = {},
+  opts: { useCache?: boolean; notices?: string[]; stopAfterTries?: number; dailyLimitReached?: (provider: string, pending: PendingCalls) => string | null; concurrency?: number } = {},
 ): Promise<{ outcome: RunOutcome; sent: number; replayed: number }> {
   const { runConfig, fingerprint } = planFor(opts.useCache);
   if (!store.getRun(runId)) store.createRun({ id: runId, createdAt: new Date().toISOString(), fingerprint, config: runConfig });
@@ -85,7 +86,7 @@ async function run(
     pacer: new Pacer({ requestsPerMinute: 1000, tokensPerMinute: 10_000_000 }, clock),
     describeError: (e) => (e instanceof Error ? e.message : String(e)),
     dailyAfterLimitErrors: [null, 3][i],
-    dailyLimitReached: () => opts.dailyLimitReached?.(["groq", "cloudflare"][i]) ?? null,
+    dailyLimitReached: (pending) => opts.dailyLimitReached?.(["groq", "cloudflare"][i], pending) ?? null,
   }));
   const outcome = await runTrials({
     store,
@@ -94,7 +95,7 @@ async function run(
     pool,
     setup: { temperature: 0, maxSteps: 3, stepTimeoutMs: 1000, reasoningEffort: "low", version },
     tasks,
-    concurrency: 1,
+    concurrency: opts.concurrency ?? 1,
     clock,
     describeError: (e) => (e instanceof Error ? e.message : String(e)),
     tracer: null,
@@ -271,6 +272,28 @@ describe("runner", () => {
     expect(cloudflareCalls).toBe(2);
     expect(notices).toContain("Groq's free limit for today is used up: all used; carrying on with Cloudflare.");
     expect(notices).toContain("Cloudflare's free limit for today is used up: 10,012 of its 10,000 neurons today are used by our count.");
+  });
+
+  it("counts calls still in flight against the allowance, so tries side by side can't pass it", async () => {
+    const store = newStore();
+    let sentToCloudflare = 0;
+    let answered = 0;
+    const groq = new MockLanguageModelV4({ doGenerate: async () => reply("Your order is processing.") });
+    const cloudflare = new MockLanguageModelV4({
+      doGenerate: async () => {
+        sentToCloudflare++;
+        await new Promise((r) => setTimeout(r, 5));
+        answered++;
+        return reply("Your order is processing.");
+      },
+    });
+    // Room for three calls in all, and two tries running at once.
+    const { outcome } = await run([groq, cloudflare], store, "r1", {
+      concurrency: 2,
+      dailyLimitReached: (provider, pending) => (provider === "groq" || answered + pending.calls > 3 ? "used up" : null),
+    });
+    expect(outcome).toMatchObject({ finished: false, reason: "daily" });
+    expect(sentToCloudflare).toBe(3);
   });
 
   it("counts three limit errors in a row from Cloudflare as its day used up, whatever they say", async () => {
