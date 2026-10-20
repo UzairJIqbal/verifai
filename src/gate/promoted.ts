@@ -3,7 +3,7 @@
 // version, say), so it can't also be the record of what v1 is. This file is:
 // the gate checks the config against its newest entry and appends to it on
 // a promotion.
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { PROJECT_ROOT, versionName } from "../config";
@@ -59,5 +59,9 @@ export function checkConfigIsPromoted(config: PromotedKnobs, promoted: PromotedK
 
 export function addPromoted(next: PromotedKnobs, path: string = PROMOTED_FILE): void {
   const all = [...readPromoted(path), next];
-  writeFileSync(/*turbopackIgnore: true*/ path, `${JSON.stringify(promotedSchema.parse(all), null, 2)}\n`);
+  // Written beside it, then renamed over it: a crash halfway leaves the old
+  // file whole, never one the next gate can't read.
+  const temp = `${path}.tmp`;
+  writeFileSync(/*turbopackIgnore: true*/ temp, `${JSON.stringify(promotedSchema.parse(all), null, 2)}\n`);
+  renameSync(/*turbopackIgnore: true*/ temp, path);
 }
