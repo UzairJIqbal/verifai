@@ -1,3 +1,4 @@
+import { PassThrough } from "node:stream";
 import { APICallError } from "ai";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../config";
@@ -10,7 +11,7 @@ import { buildRunConfig, firstRequest, newRunId, runFingerprint } from "./plan";
 import { busyWaitMs, classifyFailure } from "./provider-errors";
 import { makeRedactor, REDACTED } from "./redact";
 import { costUsd } from "./runner";
-import { countRemaining } from "./session";
+import { ask, countRemaining } from "./session";
 import { EvalStore, tryKey } from "./store";
 
 const config = loadConfig();
@@ -262,5 +263,33 @@ describe("cost", () => {
     expect(costUsd({ inputTokens: 1_000_000, cachedInputTokens: 500_000, outputTokens: 1_000_000 }, { input: 0.15, cachedInput: 0.075, output: 0.6 })).toBeCloseTo(
       0.075 + 0.0375 + 0.6,
     );
+  });
+});
+
+describe("asking before spending", () => {
+  // In a terminal, as the gate runs, Ctrl+D is a keypress; elsewhere the input ends.
+  const answer = (typed: string | null, terminal = false) => {
+    const input = new PassThrough();
+    const output = Object.assign(new PassThrough(), { isTTY: terminal });
+    const reply = ask("Start? [y/N] ", { input, output });
+    // null is Ctrl+D: the input ends with nothing typed.
+    if (typed === null) {
+      if (terminal) input.write("\u0004");
+      else input.end();
+    }
+    else input.write(typed);
+    return reply;
+  };
+
+  it("is yes only for y or yes", async () => {
+    expect(await answer("y\n")).toBe(true);
+    expect(await answer("YES\n")).toBe(true);
+    expect(await answer("\n")).toBe(false);
+    expect(await answer("yep\n")).toBe(false);
+  });
+
+  it("takes Ctrl+D as no instead of crashing", async () => {
+    expect(await answer(null, true)).toBe(false);
+    expect(await answer(null)).toBe(false);
   });
 });

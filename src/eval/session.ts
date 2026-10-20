@@ -39,12 +39,22 @@ export function fatal(message: string): never {
   process.exit(1);
 }
 
-// Yes only for a typed y or yes.
-export async function ask(question: string): Promise<boolean> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await rl.question(question);
-  rl.close();
-  return /^y(es)?$/i.test(answer.trim());
+// Yes only for a typed y or yes. Ctrl+D or the input ending is a no,
+// never a crash: in a terminal readline rejects the question, and on a plain
+// stream it just closes without settling it. Either way someone backed out.
+export async function ask(question: string, io: { input: NodeJS.ReadableStream; output: NodeJS.WritableStream } = { input: process.stdin, output: process.stdout }): Promise<boolean> {
+  const rl = createInterface({ input: io.input, output: io.output });
+  const backedOut = new Promise<false>((resolve) => rl.once("close", () => resolve(false)));
+  try {
+    const answer = await Promise.race([rl.question(question), backedOut]);
+    if (answer === false) io.output.write("\n");
+    return answer !== false && /^y(es)?$/i.test(answer.trim());
+  } catch {
+    io.output.write("\n");
+    return false;
+  } finally {
+    rl.close();
+  }
 }
 
 // One line that rewrites itself in a terminal; anything else gets a line per
