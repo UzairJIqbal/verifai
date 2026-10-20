@@ -58,6 +58,10 @@ export type PoolProvider = {
   // Limit errors in a row after which today's free limit counts as used up,
   // whatever they say; null to go by the wording alone.
   dailyAfterLimitErrors: number | null;
+  // Why a call of about this many tokens would go past today's free
+  // allowance by our own count, or null. Asked before every call, since a
+  // provider may keep answering past it (Cloudflare does).
+  dailyLimitReached: (guessTokens: number) => string | null;
 };
 
 export type RunnerOptions = {
@@ -199,7 +203,16 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
   // The first provider, in pool order, with room for this call now. If every
   // provider still in play is at its per-minute limit, waits for the first.
   // Null if every one is cooling down; throws when none has any of today left.
+  // A provider is used up for today when it says so or when our count does.
   const pick = async (guess: number): Promise<{ member: PoolProvider; ticket: Ticket } | null> => {
+    for (const p of o.pool) {
+      if (exhausted.has(p.provider)) continue;
+      const why = p.dailyLimitReached(guess);
+      if (why === null) continue;
+      exhausted.add(p.provider);
+      const takesOver = o.pool.find((q) => !exhausted.has(q.provider));
+      o.onNotice(`${p.label}'s free limit for today is used up: ${why}${takesOver ? `; carrying on with ${takesOver.label}` : ""}.`);
+    }
     const open = o.pool.filter((p) => !exhausted.has(p.provider));
     if (open.length === 0) throw new StopRun("daily", `The free limit for today is used up on every provider in the pool (${labels}).`);
     const now = clock.now();

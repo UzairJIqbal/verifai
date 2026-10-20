@@ -42,6 +42,9 @@ const freeTierLimits = z.strictObject({
   daily: z.strictObject({
     unit: z.string().min(1),
     allowance: z.number().positive(),
+    // When the day's count starts again. "rolling 24 hours" where the provider
+    // doesn't say: it never counts less than a fixed reset would.
+    resets: z.enum(["00:00 UTC", "rolling 24 hours"]),
     unitsPerMillionTokens: z.strictObject({
       input: z.number().nonnegative(),
       cachedInput: z.number().nonnegative(),

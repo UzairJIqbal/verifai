@@ -16,7 +16,7 @@ import type { Split, Task } from "../tasks/schema";
 import { readShopFacts } from "../graders/shop-facts";
 import type { ShopFacts } from "../graders/steps";
 import { cacheKey } from "./cache";
-import { estimateBudget, type Budget } from "./budget";
+import { dailyLimitReached, dayStart, estimateBudget, type Budget } from "./budget";
 import { Pacer, estimateTokens, type Clock } from "./pacer";
 import { buildRunConfig, configKey, firstRequest, newRunId, runFingerprint } from "./plan";
 import { pickSmokeTasks } from "./smoke";
@@ -304,13 +304,12 @@ async function prepareExemplars(s: Session): Promise<void> {
 export function budgetFor(s: Session, triesLeft: number, cachedTries: number): Budget {
   // Until there's history, a first request's size and a guess at the reply.
   const guessed = estimateTokens(firstRequest(s.version, s.tasks[0])) * 1.5;
-  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
   return estimateBudget({
     triesLeft,
     cachedTries,
     callsPerTry: s.store.averageCallsPerTry() ?? 4,
     usagePerCall: s.store.averageUsagePerCall(s.config.agent.pool.map((m) => m.provider)) ?? { inputTokens: guessed, cachedInputTokens: 0, outputTokens: 0 },
-    providers: s.config.agent.pool.map((m) => ({ provider: m.provider, limits: m.freeTierLimits, usedToday: s.store.usageSince(m.provider, dayAgo) })),
+    providers: s.config.agent.pool.map((m) => ({ provider: m.provider, limits: m.freeTierLimits, usedToday: s.store.usageSince(m.provider, dayStart(m.freeTierLimits.daily, Date.now())) })),
   });
 }
 
@@ -462,6 +461,10 @@ export async function executeRun(s: Session, args: { title: string; command: str
       pacer,
       describeError: (error) => describeModelError(error, member, config.agent.stepTimeoutSeconds),
       dailyAfterLimitErrors: a.dailyAfterLimitErrors,
+      dailyLimitReached: (guess) => {
+        const { daily } = member.freeTierLimits;
+        return dailyLimitReached(store.usageSince(a.provider, dayStart(daily, Date.now())), guess, daily);
+      },
     };
   });
   const progressLine = makeProgressLine(labels);

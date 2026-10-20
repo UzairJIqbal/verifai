@@ -13,6 +13,7 @@
           "daily": {
             "unit": "tokens",
             "allowance": 200000,
+            "resets": "rolling 24 hours",
             "unitsPerMillionTokens": { "input": 1000000, "cachedInput": 0, "output": 1000000 }
           }
         },
@@ -27,13 +28,14 @@
         "provider": "cloudflare",
         "modelId": "@cf/openai/gpt-oss-120b",
         "freeTierLimits": {
-          "checked": "2026-10-16 on https://developers.cloudflare.com/workers-ai/platform/pricing/ and /platform/limits/ (10,000 neurons a day, reset 00:00 UTC; no cached-input discount)",
+          "checked": "2026-10-16 on https://developers.cloudflare.com/workers-ai/platform/pricing/ and /platform/limits/ (10,000 neurons a day, reset 00:00 UTC; no cached-input discount). It doesn't refuse past the allowance: 2026-10-20 its dashboard showed 25.82k of 10k used, and our count said 26,164",
           "requestsPerMinute": 300,
           "tokensPerMinute": null,
           "requestsPerDay": null,
           "daily": {
             "unit": "neurons",
             "allowance": 10000,
+            "resets": "00:00 UTC",
             "unitsPerMillionTokens": { "input": 31818, "cachedInput": 31818, "output": 68182 }
           }
         },

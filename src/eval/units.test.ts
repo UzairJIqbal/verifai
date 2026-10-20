@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { loadConfig } from "../config";
 import { loadAgentVersion } from "../agent/versions";
 import { taskSchema } from "../tasks/schema";
-import { estimateBudget } from "./budget";
+import { dailyLimitReached, dayStart, estimateBudget } from "./budget";
 import { cacheKey, decodeCachedCall, encodeCachedCall } from "./cache";
 import { Pacer, type Clock } from "./pacer";
 import { buildRunConfig, firstRequest, newRunId, runFingerprint } from "./plan";
@@ -230,6 +230,21 @@ describe("budget", () => {
     expect(cached).toMatchObject({ calls: 0, fitsToday: true, days: 1 });
     const used = [{ ...providers[0], usedToday: { calls: 50, inputTokens: 150_000, cachedInputTokens: 0, outputTokens: 50_000 } }];
     expect(estimateBudget({ triesLeft: 1, cachedTries: 0, callsPerTry: 4, usagePerCall, providers: used }).providers[0].callsLeftToday).toBe(0);
+  });
+
+  it("starts Cloudflare's day at 00:00 UTC and Groq's 24 hours back", () => {
+    const [groq, cloudflare] = config.agent.pool.map((m) => m.freeTierLimits.daily);
+    const now = Date.UTC(2026, 9, 20, 20, 34);
+    expect(dayStart(cloudflare, now)).toBe(Date.UTC(2026, 9, 20));
+    expect(dayStart(groq, now)).toBe(Date.UTC(2026, 9, 19, 20, 34));
+  });
+
+  it("stops a provider by our count before a call would go past its allowance", () => {
+    const cloudflare = config.agent.pool[1].freeTierLimits.daily;
+    // 300,000 input tokens is 9,545 neurons; a 10,000-token call adds 318.
+    const used = { calls: 300, inputTokens: 300_000, cachedInputTokens: 0, outputTokens: 0 };
+    expect(dailyLimitReached(used, 10_000, cloudflare)).toBeNull();
+    expect(dailyLimitReached(used, 20_000, cloudflare)).toBe("9,545 of its 10,000 neurons today are used by our count");
   });
 
   // What the gate shows: tries the cache already holds cost nothing.
