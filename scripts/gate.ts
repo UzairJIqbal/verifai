@@ -2,7 +2,7 @@
 // and on holdout, same dataset, same tasks. Prints what it will spend and asks
 // first. It passes only if holdout success beats the noise floor with McNemar
 // agreeing, and no category drops by more than the config allows on either
-// split. A pass promotes the candidate (config, changelog, its holdout tries
+// split. A pass promotes the candidate (config, agent/promoted.json, changelog, its holdout tries
 // readable); a fail changes nothing but its own record.
 //
 // This is the only code that loads holdout tasks.
@@ -18,6 +18,7 @@ import { candidateKnobs, describeChange, readCandidate, type Candidate } from ".
 import { decideGate } from "../src/gate/check";
 import { agentKey, newestFloorFor, rescaleNoise, type FloorSource } from "../src/gate/floor";
 import { addChangelogEntry, CHANGELOG_FILE, CONFIG_FILE, changelogEntry, gateComparison, gateRecordPath, rewriteConfigText, snapshotFiles, writeGateRecord, type PromotedKnobs } from "../src/gate/record";
+import { addPromoted, checkConfigIsPromoted, PROMOTED_FILE, readPromoted } from "../src/gate/promoted";
 import type { GateRecord } from "../src/gate/schema";
 import { readNoiseFloors } from "../src/results/read";
 import { RESULT_FILES, type NoiseFloor } from "../src/results/schema";
@@ -78,11 +79,13 @@ async function estimate(slot: Slot, floors: NoiseFloor[]): Promise<Estimate> {
   }
 }
 
-function printComparison(title: string, c: Comparison): void {
-  console.log(`\n  ${styleText("bold", title)} ${dim(`(${c.sharedTasks} tasks; promoted → candidate)`)}`);
+// Noise is only ever measured on dev (holdout is never run twice for it), so
+// every holdout floor is the dev one rescaled: an estimate, and labelled one.
+function printComparison(title: string, c: Comparison, floorFrom: "measured on dev" | "estimated from dev"): void {
+  console.log(`\n  ${styleText("bold", title)} ${dim(`(${c.sharedTasks} tasks; promoted → candidate; noise floor ${floorFrom})`)}`);
   const row = (label: string, r: Comparison["overall"]) =>
     `  ${label.padEnd(9)} ${pct(r.aRate).padStart(6)} → ${pct(r.bRate).padStart(6)}  ${points(r.difference.value).padStart(6)} [${points(r.difference.lo)}, ${points(r.difference.hi)}]  ${dim(
-      `${r.tasks} tasks · p ${r.mcnemar.p.toFixed(3)} · floor ${r.floor === null || Number.isNaN(r.floor) ? "–" : points(r.floor, false)}`,
+      `${r.tasks} tasks · p ${r.mcnemar.p.toFixed(3)} · floor ${r.floor === null || Number.isNaN(r.floor) ? "–" : `${points(r.floor, false)}${floorFrom === "estimated from dev" ? " (estimated from dev)" : ""}`}`,
     )}`;
   console.log(row("all", c.overall));
   for (const cat of CATEGORIES) {
@@ -116,7 +119,9 @@ async function main(): Promise<void> {
   try {
     config = loadConfig();
     candidate = readCandidate(args[0]);
-    promoted = { agentVersion: config.agentVersion, ...knobsOf(config) };
+    // The config must be exactly the promoted version, or "promoted" below
+    // would be some other agent.
+    promoted = checkConfigIsPromoted({ agentVersion: config.agentVersion, ...knobsOf(config) }, readPromoted());
     next = candidateKnobs(candidate, promoted);
     const notes = readNotes();
     const report = taxonomyReport(notes, readTags(notes), readTaxonomy() ?? fatal("There's no failure taxonomy yet (evals/review/taxonomy.json), so no candidate can say what it targets."));
@@ -166,7 +171,7 @@ async function main(): Promise<void> {
   console.log(
     dim(
       `  noise floor: ${points(source.floor.overall.floor, false)} points measured ${source.floor.measuredAt.slice(0, 10)} on dataset ${source.floor.datasetVersion} (${source.floor.overall.tasks} tasks, runs ${source.floor.runs.join(" and ")}, configuration ${source.floor.configKey}),` +
-        ` rescaled to ${points(devNoise.overall.floor, false)} on dev and ${points(holdoutNoise.overall.floor, false)} on holdout`,
+        ` rescaled to ${points(devNoise.overall.floor, false)} on dev and ${points(holdoutNoise.overall.floor, false)} on holdout (estimated from dev: holdout is never run twice to measure its own)`,
     ),
   );
 
@@ -220,8 +225,8 @@ async function main(): Promise<void> {
   const holdoutCmp = compareRuns(rows(runs.promotedHoldout, holdoutById), rows(runs.candidateHoldout, holdoutById), holdoutNoise);
   const decision = decideGate({ dev: devCmp, holdout: holdoutCmp, maxDropPoints: config.gate.maxCategoryDropPoints });
 
-  printComparison("Holdout", holdoutCmp);
-  printComparison("Dev", devCmp);
+  printComparison("Holdout", holdoutCmp, "estimated from dev");
+  printComparison("Dev", devCmp, "measured on dev");
   console.log("");
   for (const c of decision.checks) console.log(`  ${c.pass ? styleText("green", "pass") : styleText("red", "FAIL")}  ${c.label} ${dim(`· ${c.detail}`)}`);
 
@@ -263,14 +268,15 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Promotion: the config, the holdout files unsealed, the record and the
+  // Promotion: the config, agent/promoted.json, the holdout files unsealed, the record and the
   // changelog. All or nothing: if any step fails, every file is put back as
   // it was and the record says it wasn't promoted.
   const recordPath = gateRecordPath(record);
   const runDir = join(PROJECT_ROOT, "results", runs.candidateHoldout);
-  const restore = snapshotFiles([CONFIG_FILE, CHANGELOG_FILE, recordPath, ...Object.values(RESULT_FILES).map((f) => join(runDir, f))]);
+  const restore = snapshotFiles([CONFIG_FILE, PROMOTED_FILE, CHANGELOG_FILE, recordPath, ...Object.values(RESULT_FILES).map((f) => join(runDir, f))]);
   try {
     promote({ agentVersion: candidate.name, ...next });
+    addPromoted({ agentVersion: candidate.name, ...next });
     const stored = last.store.getRun(runs.candidateHoldout);
     if (stored === null || stored.finishedAt === null) throw new Error(`run ${runs.candidateHoldout} isn't finished in the eval store`);
     writeResults(stored, last.store.loadTrials(stored.id), holdoutById, stored.finishedAt, last.redact, undefined, candidate.name);

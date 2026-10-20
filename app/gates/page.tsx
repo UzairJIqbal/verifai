@@ -33,7 +33,10 @@ function Rows({ split, c, tries }: { split: string; c: GateRecord["dev"]; tries:
         [{pts(r.difference.lo)}, {pts(r.difference.hi)}]
       </td>
       <td className={num}>{p(r.p)}</td>
-      <td className={`${num} text-muted-foreground`}>{r.floor === null ? "–" : (r.floor * 100).toFixed(1)}</td>
+      <td className={`${num} text-muted-foreground`}>
+        {r.floor === null ? "–" : (r.floor * 100).toFixed(1)}
+        {r.floor !== null && split === "holdout" && " (estimated from dev)"}
+      </td>
       <td className={`${cell} ${VERDICT[r.verdict].tone}`}>{VERDICT[r.verdict].text}</td>
     </tr>
   ));
@@ -58,7 +61,8 @@ function Gate({ g }: { g: GateRecord }) {
       <p className="mt-1 max-w-prose">{g.why}</p>
       <p className="mt-1 text-[12px] text-muted-foreground">
         Noise floor {(g.floor.overall * 100).toFixed(1)} points measured {g.floor.measuredAt.slice(0, 10)} on dataset {g.floor.datasetVersion} ({g.floor.tasks} tasks, configuration{" "}
-        <span className="font-mono">{g.floor.configKey}</span>), rescaled to each row&apos;s task count.
+        <span className="font-mono">{g.floor.configKey}</span>), rescaled to each row&apos;s task count. Holdout floors are estimated from dev: holdout is never run twice to
+        measure its own.
       </p>
 
       <div className="mt-2 max-w-[72rem] overflow-x-auto rounded-md border">

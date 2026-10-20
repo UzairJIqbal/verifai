@@ -10,6 +10,7 @@ import { candidateKnobs, readCandidate, type Candidate } from "./candidates";
 import { decideGate } from "./check";
 import { agentKey, newestFloorFor, rescaleNoise } from "./floor";
 import { addChangelogEntry, changelogEntry, gateComparison, listGates, rewriteConfigText, snapshotFiles, writeGateRecord } from "./record";
+import { addPromoted, checkConfigIsPromoted, readPromoted } from "./promoted";
 import type { GateRecord } from "./schema";
 
 const dir = mkdtempSync(join(tmpdir(), "verifai-gate-test-"));
@@ -38,6 +39,28 @@ describe("candidates", () => {
     expect(() => readCandidate("v2", dir)).toThrow(/exactly one change/);
     writeFileSync(join(dir, "v3.json"), JSON.stringify(candidate({ promptVersion: "v2" })));
     expect(() => readCandidate("v3", dir)).toThrow(/says its name is v2/);
+  });
+});
+
+describe("the promoted version", () => {
+  it("refuses a config that isn't exactly the promoted version, naming what differs", () => {
+    expect(checkConfigIsPromoted(promoted, [promoted])).toEqual(promoted);
+    // The control's tools left in the config after resuming its eval run.
+    expect(() => checkConfigIsPromoted({ ...promoted, toolDescriptionsVersion: "v3" }, [promoted])).toThrow(/isn't on the promoted version v1.*"toolDescriptionsVersion" is "v3", the promoted version has "v1"/);
+    expect(() => checkConfigIsPromoted({ ...promoted, validation: "refund-limit", exemplars: true }, [promoted])).toThrow(/"validation".*"exemplars"/);
+    // Still saying v1 after v2 was promoted.
+    const v2 = { ...promoted, agentVersion: "v2", validation: "refund-limit" as const };
+    expect(() => checkConfigIsPromoted(promoted, [promoted, v2])).toThrow(/promoted version v2/);
+  });
+
+  it("reads the newest promoted version last, appends on promotion, and refuses a bad file", () => {
+    const path = join(dir, "promoted.json");
+    expect(() => readPromoted(path)).toThrow(/no agent\/promoted.json/);
+    writeFileSync(path, JSON.stringify([promoted]));
+    addPromoted({ ...promoted, agentVersion: "v2", promptVersion: "v2" }, path);
+    expect(readPromoted(path).map((p) => p.agentVersion)).toEqual(["v1", "v2"]);
+    writeFileSync(path, "[]");
+    expect(() => readPromoted(path)).toThrow(/at least the first version/);
   });
 });
 

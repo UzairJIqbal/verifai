@@ -136,7 +136,7 @@ export function changelogEntry(record: GateRecord, gateFile: string): string {
     metricLine("Holdout success", record.holdout.overall, record.holdout.overall.tasks, record.triesPerTask),
     metricLine("Dev success", record.dev.overall, record.dev.overall.tasks, record.triesPerTask),
     `- By category, points: holdout ${cats(record.holdout)}; dev ${cats(record.dev)}. None dropped more than ${record.maxCategoryDropPoints}.`,
-    `- Noise floor from configuration ${record.floor.configKey} (dataset ${record.floor.datasetVersion}, ${record.floor.tasks} tasks, measured ${record.floor.measuredAt.slice(0, 10)}), rescaled to each slice's task count.`,
+    `- Noise floor from configuration ${record.floor.configKey} (dataset ${record.floor.datasetVersion}, ${record.floor.tasks} tasks, measured ${record.floor.measuredAt.slice(0, 10)}), rescaled to each slice's task count; the holdout floor is estimated from dev, since holdout is never run twice to measure its own.`,
     `- Runs: dev ${record.runs.promotedDev} → ${record.runs.candidateDev}; holdout ${record.runs.promotedHoldout} → ${record.runs.candidateHoldout}. Gate record: ${gateFile}.`,
     "",
   ].join("\n");
