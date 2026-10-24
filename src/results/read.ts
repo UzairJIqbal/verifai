@@ -55,8 +55,8 @@ export function listRuns(): RunListing {
   const runs: Report[] = [];
   const problems: string[] = [];
   for (const entry of readdirSync(/*turbopackIgnore: true*/ RESULTS_DIR, { withFileTypes: true })) {
-    // results/gates/ holds gate records, not a run.
-    if (!entry.isDirectory() || !RUN_ID.test(entry.name) || entry.name === "gates") continue;
+    // results/gates/ holds gate records and results/online/ traffic batches, not runs.
+    if (!entry.isDirectory() || !RUN_ID.test(entry.name) || entry.name === "gates" || entry.name === "online") continue;
     try {
       runs.push(readReport(entry.name));
     } catch (error) {

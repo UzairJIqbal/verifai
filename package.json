@@ -23,6 +23,7 @@
     "tasks:freeze": "tsx scripts/freeze-tasks.ts",
     "task:new": "tsx scripts/task-new.ts",
     "task:add": "tsx scripts/task-add.ts",
+    "traffic": "tsx scripts/traffic.ts",
     "exemplars:add": "tsx scripts/exemplars-add.ts",
     "gate": "tsx scripts/gate.ts",
     "chart": "tsx scripts/chart.ts"

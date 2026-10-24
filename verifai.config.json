@@ -90,5 +90,14 @@
       "cachedInput": 0.3,
       "output": 2.5
     }
+  },
+  "online": {
+    "conversationsPerBatch": 10,
+    "sampleShare": 1,
+    "hallucinationThreshold": 0.2,
+    "customerPromptVersion": "v1",
+    "customerTemperature": 1,
+    "maxTurns": 8,
+    "maxCallsPerBatch": 300
   }
 }

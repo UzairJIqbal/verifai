@@ -131,30 +131,64 @@ async function LiveReview() {
         )
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,56rem)_22rem] lg:items-start">
-          <div>
-            <p className="mb-1 text-[12px] text-muted-foreground">
-              <Link href={`/runs/${next.runId}`} className="font-mono text-link hover:underline">
-                {next.runId}
-              </Link>{" "}
-              / <span className="font-mono text-foreground">{next.taskId}</span>, try {next.tryNumber} · {next.trial.category} · {next.trial.difficulty}
-              {next.trial.end && <> · ended: {next.trial.end}</>}
-            </p>
-            <VerdictSummary verdicts={next.trial.verdicts} errored={false} />
-            <JudgeVerdicts judge={next.trial.judge} runId={next.runId} errored={false} hasReply={next.trial.steps.some((s) => s.type === "text")} />
-            <p className="mb-3 text-[12px]">
-              <span className="text-muted-foreground">Claims: </span>
-              <ClaimsLine claims={next.trial.claims} runId={next.runId} errored={false} />
-            </p>
-            <TrajectorySteps trial={next.trial} />
-          </div>
+          {next.online ? (
+            <OnlineItem next={next} flags={next.online.flags} persona={next.online.persona} />
+          ) : (
+            <div>
+              <p className="mb-1 text-[12px] text-muted-foreground">
+                <Link href={`/runs/${next.runId}`} className="font-mono text-link hover:underline">
+                  {next.runId}
+                </Link>{" "}
+                / <span className="font-mono text-foreground">{next.taskId}</span>, try {next.tryNumber} · {next.trial.category} · {next.trial.difficulty}
+                {next.trial.end && <> · ended: {next.trial.end}</>}
+              </p>
+              <VerdictSummary verdicts={next.trial.verdicts} errored={false} />
+              <JudgeVerdicts judge={next.trial.judge} runId={next.runId} errored={false} hasReply={next.trial.steps.some((s) => s.type === "text")} />
+              <p className="mb-3 text-[12px]">
+                <span className="text-muted-foreground">Claims: </span>
+                <ClaimsLine claims={next.trial.claims} runId={next.runId} errored={false} />
+              </p>
+              <TrajectorySteps trial={next.trial} />
+            </div>
+          )}
           <aside className="space-y-3 lg:sticky lg:top-4">
-            <TaskCard task={task} runVersion={next.datasetVersion} tasksVersion={loaded.tasksVersion} />
+            {/* Online there's no expected outcome to compare against. */}
+            {next.online ? (
+              <p className="text-[12px] text-muted-foreground">
+                An online conversation: the customer was simulated, with no expected outcome. Note what the agent got wrong in the flagged lines.
+              </p>
+            ) : (
+              <TaskCard task={task} runVersion={next.datasetVersion} tasksVersion={loaded.tasksVersion} />
+            )}
             {/* Keyed by try, so the next one starts with an empty note. */}
             <NoteForm key={trialKey(next)} trial={{ runId: next.runId, taskId: next.taskId, tryNumber: next.tryNumber }} categories={taxonomy?.categories ?? null} />
           </aside>
         </div>
       )}
     </>
+  );
+}
+
+// A flagged online conversation: why it was flagged, then what was said.
+function OnlineItem({ next, flags, persona }: { next: Reviewable; flags: string[]; persona: string }) {
+  return (
+    <div>
+      <p className="mb-1 text-[12px] text-muted-foreground">
+        <span className="mr-1 rounded-sm border px-1 font-mono text-[11px] text-foreground">online</span>
+        <Link href={`/online/${next.runId}/${next.tryNumber}`} className="font-mono text-link hover:underline">
+          {next.runId} #{next.tryNumber}
+        </Link>{" "}
+        · goal from <span className="font-mono text-foreground">{next.taskId}</span> · {persona} · {next.trial.category}
+      </p>
+      <ul className="mb-3 space-y-0.5 text-[12px]">
+        {flags.map((f) => (
+          <li key={f} className="text-fail">
+            {f}
+          </li>
+        ))}
+      </ul>
+      <TrajectorySteps trial={next.trial} />
+    </div>
   );
 }
 

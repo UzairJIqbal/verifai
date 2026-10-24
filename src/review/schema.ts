@@ -20,6 +20,9 @@ export const noteSchema = z.object({
   // trajectory instead of a person, as with Phase 9's drafted labels. Kept so
   // the report can say so.
   draftedBy: z.literal("model").optional(),
+  // A flagged online conversation rather than a failed try: runId is its
+  // batch, taskId the dev task its goal came from, tryNumber its number.
+  online: z.literal(true).optional(),
 });
 export type Note = z.infer<typeof noteSchema>;
 

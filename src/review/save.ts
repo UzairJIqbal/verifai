@@ -27,7 +27,7 @@ export function saveNote(body: SaveNoteRequest, now: Date, files: ReviewFiles = 
   if (!checked.ok) return checked;
 
   const at = now.toISOString();
-  appendNote({ runId: next.runId, taskId: next.taskId, tryNumber: next.tryNumber, taskCategory: next.trial.category, datasetVersion: next.datasetVersion, note: body.note, notedAt: at, ...(body.draftedBy ? { draftedBy: body.draftedBy } : {}) }, files);
+  appendNote({ runId: next.runId, taskId: next.taskId, tryNumber: next.tryNumber, taskCategory: next.trial.category, datasetVersion: next.datasetVersion, note: body.note, notedAt: at, ...(body.draftedBy ? { draftedBy: body.draftedBy } : {}), ...(next.online ? { online: true as const } : {}) }, files);
   if (body.category !== null) appendTag({ runId: next.runId, taskId: next.taskId, tryNumber: next.tryNumber, category: body.category, taggedAt: at }, files);
   return { ok: true };
 }

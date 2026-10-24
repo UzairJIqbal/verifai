@@ -9,7 +9,7 @@ import type { Note, Taxonomy } from "./schema";
 
 const isNum = (x: number) => !Number.isNaN(x);
 export const shareText = (e: Estimate) => (isNum(e.value) ? `${pct(e.value)} (${isNum(e.lo) ? `${(e.lo * 100).toFixed(1)}–${(e.hi * 100).toFixed(1)}` : "–"})` : "–");
-export const trialPath = (n: Pick<Note, "runId" | "taskId" | "tryNumber">) => `/runs/${n.runId}/${n.taskId}/${n.tryNumber}`;
+export const trialPath = (n: Pick<Note, "runId" | "taskId" | "tryNumber" | "online">) => (n.online ? `/online/${n.runId}/${n.tryNumber}` : `/runs/${n.runId}/${n.taskId}/${n.tryNumber}`);
 
 // Said wherever the counts are, so drafted notes are never read as a person's.
 export const draftedLine = (report: TaxonomyReport): string | null =>

@@ -114,6 +114,29 @@ const embeddingSchema = z.strictObject({
 });
 export type EmbeddingConfig = z.infer<typeof embeddingSchema>;
 
+// Online evals: a simulated customer talks to the agent, and a sample of
+// those conversations is graded without an answer key.
+const onlineSchema = z.strictObject({
+  // Conversations one `pnpm traffic` makes.
+  conversationsPerBatch: z.number().int().positive(),
+  // The share of a batch that's graded (and so costs judge calls).
+  sampleShare: z.number().gt(0).max(1),
+  // Above this share of sampled conversations with a hallucination, the
+  // online page shows a red banner and the command prints an alert.
+  hallucinationThreshold: z.number().min(0).max(1),
+  // online/customer/<version>.md: the customer's instructions and personas.
+  customerPromptVersion: versionName,
+  // The customer is the agent's model; above 0 so its wording varies between
+  // conversations of the same template and persona.
+  customerTemperature: z.number().min(0).max(2),
+  // Customer messages before the conversation is cut off.
+  maxTurns: z.number().int().positive(),
+  // Customer and agent calls one batch may send, failed ones included. The
+  // batch stops cleanly at it and keeps what finished. Judge calls aren't in it.
+  maxCallsPerBatch: z.number().int().positive(),
+});
+export type OnlineConfig = z.infer<typeof onlineSchema>;
+
 export const configSchema = z.strictObject({
   agent: z
     .strictObject({
@@ -169,6 +192,7 @@ export const configSchema = z.strictObject({
     maxCategoryDropPoints: z.number().nonnegative(),
   }),
   judge: judgeSchema,
+  online: onlineSchema,
 });
 export type Config = z.infer<typeof configSchema>;
 
