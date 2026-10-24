@@ -131,6 +131,9 @@ async function main(): Promise<void> {
     } else {
       console.log(`\n  ${outcome.judgments.length} tries judged · ${outcome.sent} judge calls sent.`);
     }
+    if (outcome.uncosted > 0) {
+      console.log(styleText("yellow", `  ${outcome.uncosted} answers came from the cache before token counts were saved, so this run's cost per success can't be shown.`));
+    }
     printJudgeReport(written.report);
     console.log(dim(`\n  Results: ${relative(PROJECT_ROOT, written.dir)}/ · open the run page with \`pnpm dev\``));
   } catch (error) {

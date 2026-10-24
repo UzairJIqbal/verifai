@@ -48,6 +48,8 @@ export const callsToSend = (plan: JudgePlan): number => jobsToSend(plan.jobs);
 export type JudgeOutcome = {
   judgments: { taskId: string; tryNumber: number; judge: JudgeCheck }[];
   sent: number;
+  // Answers replayed from before their tokens were saved: their cost isn't known.
+  uncosted: number;
   // Null when every try was judged.
   stop: StopReason | null;
 };
@@ -75,5 +77,5 @@ export async function runJudge(o: {
     read: (text, job) => readJudgeAnswer(text, job.request, setup),
     isUngraded: (check) => check.status === "ungraded",
   });
-  return { judgments: out.results.map(({ taskId, tryNumber, result }) => ({ taskId, tryNumber, judge: result })), sent: out.sent, stop: out.stop };
+  return { judgments: out.results.map(({ taskId, tryNumber, result, cost }) => ({ taskId, tryNumber, judge: cost === null ? result : { ...result, cost } })), sent: out.sent, uncosted: out.uncosted, stop: out.stop };
 }

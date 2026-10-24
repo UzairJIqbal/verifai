@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { EmptyState, PageHeading } from "@/components/shell/empty-state";
 import { listGates } from "@/src/gate/record";
-import type { GateRecord, GateRow } from "@/src/gate/schema";
+import { gateAnchor, type GateRecord, type GateRow } from "@/src/gate/schema";
 import { CATEGORIES } from "@/src/tasks/schema";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
@@ -51,7 +51,7 @@ function Gate({ g }: { g: GateRecord }) {
     </Link>
   );
   return (
-    <section className="mb-8">
+    <section id={gateAnchor(g)} className="mb-8 scroll-mt-4">
       <h2 className="text-[15px] font-semibold">
         {g.name} against {g.basedOn}:{" "}
         <span className={g.passed ? "text-pass" : "text-fail"}>{g.passed ? (g.promoted ? "passed, promoted" : "passed, promotion incomplete") : "failed, nothing changed"}</span>

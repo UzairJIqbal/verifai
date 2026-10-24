@@ -7,7 +7,9 @@ import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 import { z } from "zod";
 import { PROJECT_ROOT, REASONING_EFFORTS } from "../config";
 import { SPLITS } from "../tasks/schema";
-import { claimCheckSchema, judgeCheckSchema, stepSchema, TRIAL_STATUSES, recordedTrialSchema, verdictSchema, type ClaimCheck, type JudgeCheck, type RecordedTrial } from "../results/schema";
+import { claimCheckSchema, judgeCheckSchema, stepSchema, TRIAL_STATUSES, recordedTrialSchema, usageSchema, verdictSchema, type ClaimCheck, type JudgeCheck, type RecordedTrial } from "../results/schema";
+
+type Usage = z.infer<typeof usageSchema>;
 import type { Redact } from "./redact";
 import type { Verdict } from "./trajectory";
 
@@ -141,7 +143,11 @@ CREATE TABLE IF NOT EXISTS grades (
 CREATE TABLE IF NOT EXISTS cache (
   key TEXT PRIMARY KEY,
   created_at TEXT NOT NULL,
-  response_json TEXT NOT NULL
+  response_json TEXT NOT NULL,
+  -- A judge call's tokens, so a replayed answer still says what it cost.
+  -- Null for agent calls (their tokens are in the answer) and for judge
+  -- answers cached before these were saved.
+  usage_json TEXT
 );
 -- Every call actually sent, cached ones not included: our own count of what
 -- today's free limit has left.
@@ -202,6 +208,7 @@ export class EvalStore {
     const trials = columnsOf("trials");
     if (!trials.has("claims_json")) this.db.exec("ALTER TABLE trials ADD COLUMN claims_json TEXT");
     if (!trials.has("judge_json")) this.db.exec("ALTER TABLE trials ADD COLUMN judge_json TEXT");
+    if (!columnsOf("cache").has("usage_json")) this.db.exec("ALTER TABLE cache ADD COLUMN usage_json TEXT");
   }
 
   close(): void {
@@ -399,8 +406,16 @@ export class EvalStore {
     return row?.response_json ?? null;
   }
 
-  cachePut(key: string, json: string, at: string): void {
-    this.db.prepare("INSERT OR REPLACE INTO cache (key, created_at, response_json) VALUES (?, ?, ?)").run(key, at, this.redact(json));
+  cachePut(key: string, json: string, at: string, usage: Usage | null = null): void {
+    this.db
+      .prepare("INSERT OR REPLACE INTO cache (key, created_at, response_json, usage_json) VALUES (?, ?, ?, ?)")
+      .run(key, at, this.redact(json), usage === null ? null : JSON.stringify(usageSchema.parse(usage)));
+  }
+
+  // The tokens saved with a cached judge answer, or null if none were.
+  cacheUsage(key: string): Usage | null {
+    const row = z.object({ usage_json: z.string().nullable() }).optional().parse(this.db.prepare("SELECT usage_json FROM cache WHERE key = ?").get(key));
+    return row?.usage_json == null ? null : usageSchema.parse(JSON.parse(row.usage_json));
   }
 
   recordProviderCall(call: { at: number; provider: string; model: string; inputTokens: number; cachedInputTokens: number; outputTokens: number }): void {

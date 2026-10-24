@@ -74,11 +74,17 @@ export const claimSchema = z.object({
 });
 export type Claim = z.infer<typeof claimSchema>;
 
+// What one judge-model call cost: its tokens, priced at the judge's rates in
+// the config when it was made. A replayed answer carries its original call's.
+// Absent on checks made before these were saved: not recorded, never zero.
+export const callCostSchema = z.object({ usage: usageSchema, costUsd: z.number().nonnegative() });
+export type CallCost = z.infer<typeof callCostSchema>;
+
 // What the claim checker made of one try. Ungraded when its answer couldn't
 // be read: never counted as supported.
 export const claimCheckSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("checked"), model: z.string(), promptVersion: z.string(), claims: z.array(claimSchema) }),
-  z.object({ status: z.literal("ungraded"), model: z.string(), promptVersion: z.string(), reason: z.string() }),
+  z.object({ status: z.literal("checked"), model: z.string(), promptVersion: z.string(), claims: z.array(claimSchema), cost: callCostSchema.optional() }),
+  z.object({ status: z.literal("ungraded"), model: z.string(), promptVersion: z.string(), reason: z.string(), cost: callCostSchema.optional() }),
 ]);
 export type ClaimCheck = z.infer<typeof claimCheckSchema>;
 
@@ -96,8 +102,8 @@ export type CriterionVerdict = z.infer<typeof criterionVerdictSchema>;
 // applied to the try have a verdict. Ungraded when the answer couldn't be
 // read: never a pass.
 export const judgeCheckSchema = z.discriminatedUnion("status", [
-  z.object({ status: z.literal("judged"), model: z.string(), rubricVersion: z.string(), verdicts: z.array(criterionVerdictSchema) }),
-  z.object({ status: z.literal("ungraded"), model: z.string(), rubricVersion: z.string(), reason: z.string() }),
+  z.object({ status: z.literal("judged"), model: z.string(), rubricVersion: z.string(), verdicts: z.array(criterionVerdictSchema), cost: callCostSchema.optional() }),
+  z.object({ status: z.literal("ungraded"), model: z.string(), rubricVersion: z.string(), reason: z.string(), cost: callCostSchema.optional() }),
 ]);
 export type JudgeCheck = z.infer<typeof judgeCheckSchema>;
 

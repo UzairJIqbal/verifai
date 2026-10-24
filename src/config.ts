@@ -95,6 +95,9 @@ const judgeSchema = z.strictObject({
     requestsPerMinute: z.number().int().positive(),
     requestsPerDay: z.number().int().positive(),
   }),
+  // The judge's and claim checker's calls are priced too, so a version that
+  // costs more to check can't look cheaper per success than it is.
+  pricePerMillionTokensUsd: prices,
 });
 export type JudgeConfig = z.infer<typeof judgeSchema>;
 

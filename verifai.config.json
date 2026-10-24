@@ -83,6 +83,12 @@
       "checked": "2026-10-17 on https://aistudio.google.com/rate-limit (gemini-3.5-flash-lite: 15 RPM, 250K TPM, 500 RPD)",
       "requestsPerMinute": 15,
       "requestsPerDay": 500
+    },
+    "pricePerMillionTokensUsd": {
+      "checked": "2026-10-21 on https://ai.google.dev/gemini-api/docs/pricing (standard tier; thinking tokens are billed as output, and the AI SDK counts them in output tokens)",
+      "input": 0.3,
+      "cachedInput": 0.3,
+      "output": 2.5
     }
   }
 }

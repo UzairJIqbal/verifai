@@ -44,6 +44,8 @@ export type ClaimsProgress = CallsProgress;
 export type ClaimsOutcome = {
   checks: { taskId: string; tryNumber: number; claims: ClaimCheck }[];
   sent: number;
+  // Answers replayed from before their tokens were saved: their cost isn't known.
+  uncosted: number;
   // Null when every try was checked.
   stop: StopReason | null;
 };
@@ -72,5 +74,5 @@ export async function runClaims(o: {
     read: (text, job) => readClaimsAnswer(text, job.request, setup),
     isUngraded: (claims) => claims.status === "ungraded",
   });
-  return { checks: out.results.map(({ taskId, tryNumber, result }) => ({ taskId, tryNumber, claims: result })), sent: out.sent, stop: out.stop };
+  return { checks: out.results.map(({ taskId, tryNumber, result, cost }) => ({ taskId, tryNumber, claims: cost === null ? result : { ...result, cost } })), sent: out.sent, uncosted: out.uncosted, stop: out.stop };
 }

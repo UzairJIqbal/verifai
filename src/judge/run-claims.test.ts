@@ -83,6 +83,27 @@ describe("claim checker", () => {
     expect(again.checks).toEqual(out.checks);
   });
 
+  it("prices each call at the judge's rates, replays the same price from the cache, and says when an old answer has none", async () => {
+    const store = new EvalStore(":memory:", (t) => t);
+    const trials = [trial(1, "Order 1012 shipped."), trial(2, null)];
+    const p = judge.pricePerMillionTokensUsd;
+    const expected = { usage: { inputTokens: 10, cachedInputTokens: 0, outputTokens: 5 }, costUsd: (10 * p.input + 5 * p.output) / 1_000_000 };
+
+    const first = await run(store, trials, new MockLanguageModelV4({ doGenerate: answer(GOOD) }));
+    expect(first.checks.map((c) => c.claims.cost)).toEqual([expected, { usage: { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }, costUsd: 0 }]);
+    expect(first.uncosted).toBe(0);
+
+    const replay = await run(store, trials, new MockLanguageModelV4({ doGenerate: answer(GOOD) }));
+    expect(replay.checks[0].claims.cost).toEqual(expected);
+
+    // An answer cached before tokens were saved: its cost is unknown, not zero.
+    const [job] = planClaims(store, setup, trials, background).jobs;
+    store.cachePut(job.key, GOOD, "2026-10-01T00:00:00.000Z");
+    const old = await run(store, trials, new MockLanguageModelV4({ doGenerate: answer(GOOD) }));
+    expect(old.checks[0].claims.cost).toBeUndefined();
+    expect(old.uncosted).toBe(1);
+  });
+
   it("records a malformed answer as couldn't grade, and doesn't ask again for it", async () => {
     const store = new EvalStore(":memory:", (t) => t);
     const trials = [trial(1, "Order 1012 shipped.")];

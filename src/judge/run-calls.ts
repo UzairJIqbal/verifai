@@ -7,8 +7,10 @@ import { generateText, NoObjectGeneratedError, Output, type LanguageModel } from
 import type { z } from "zod";
 import type { JudgeConfig } from "../config";
 import type { Clock } from "../eval/pacer";
+import { costUsd } from "../eval/runner";
 import { BUSY_RETRIES, busyWaitMs, classifyFailure } from "../eval/provider-errors";
 import type { EvalStore } from "../eval/store";
+import type { CallCost } from "../results/schema";
 import { judgeProviderOptions } from "./model";
 import type { JudgeSetup } from "./claims";
 
@@ -28,8 +30,12 @@ export type CallsProgress = { done: number; total: number; sent: number; replaye
 export type StopReason = { reason: "daily" | "busy" | "config" | "errors" | "interrupted"; message: string };
 
 export type CallsOutcome<R> = {
-  results: { taskId: string; tryNumber: number; result: R }[];
+  // `cost` is null for an answer cached before its tokens were saved: what it
+  // cost isn't known, which is different from free.
+  results: { taskId: string; tryNumber: number; result: R; cost: CallCost | null }[];
   sent: number;
+  // How many results have no cost, so a caller can say so.
+  uncosted: number;
   // Null when every try was done.
   stop: StopReason | null;
 };
@@ -66,11 +72,15 @@ export async function runJudgeCalls<J extends JudgeJob, R>(o: {
   const progress: CallsProgress = { done: 0, total: o.jobs.length, sent: 0, replayed: 0, ungraded: 0 };
   let lastSentAt = -Infinity;
   let failuresInARow = 0;
-  const stopped = (stop: StopReason): CallsOutcome<R> => ({ results, sent: progress.sent, stop });
+  const uncosted = () => results.filter((r) => r.cost === null).length;
+  const stopped = (stop: StopReason): CallsOutcome<R> => ({ results, sent: progress.sent, uncosted: uncosted(), stop });
   const interrupted = () => stopped({ reason: "interrupted", message: "Stopped by Ctrl-C." });
 
-  const record = (job: J, result: R) => {
-    results.push({ taskId: job.taskId, tryNumber: job.tryNumber, result });
+  const priced = (usage: CallCost["usage"]): CallCost => ({ usage, costUsd: costUsd(usage, judge.pricePerMillionTokensUsd) });
+  const NO_CALL: CallCost = { usage: { inputTokens: 0, cachedInputTokens: 0, outputTokens: 0 }, costUsd: 0 };
+
+  const record = (job: J, result: R, cost: CallCost | null) => {
+    results.push({ taskId: job.taskId, tryNumber: job.tryNumber, result, cost });
     progress.done++;
     if (o.isUngraded(result)) progress.ungraded++;
     o.onProgress({ ...progress });
@@ -78,7 +88,7 @@ export async function runJudgeCalls<J extends JudgeJob, R>(o: {
 
   // The raw answer, cached before it's read: a malformed one is kept too, so
   // it reads as "couldn't grade" again rather than being asked for again.
-  const send = async (job: J, input: string): Promise<string> => {
+  const send = async (job: J, input: string): Promise<{ text: string; cost: CallCost }> => {
     if (o.model === null) throw new Error("A judge call was needed, but no judge model was connected.");
     const at = clock.now();
     let text: string;
@@ -103,26 +113,28 @@ export async function runJudgeCalls<J extends JudgeJob, R>(o: {
       text = error.text ?? "";
       usage = { inputTokens: error.usage?.inputTokens, outputTokens: error.usage?.outputTokens };
     }
-    store.recordProviderCall({ at, provider: judge.provider, model: judge.model, inputTokens: usage.inputTokens ?? 0, cachedInputTokens: 0, outputTokens: usage.outputTokens ?? 0 });
-    store.cachePut(job.key, text, new Date(at).toISOString());
-    return text;
+    const tokens = { inputTokens: usage.inputTokens ?? 0, cachedInputTokens: 0, outputTokens: usage.outputTokens ?? 0 };
+    store.recordProviderCall({ at, provider: judge.provider, model: judge.model, ...tokens });
+    store.cachePut(job.key, text, new Date(at).toISOString(), tokens);
+    return { text, cost: priced(tokens) };
   };
 
   for (const job of o.jobs) {
     if (o.stopRequested()) return interrupted();
     if (job.input === null) {
       if (o.noCall === undefined) throw new Error(`${job.taskId} try ${job.tryNumber} has nothing to ask the judge, and nothing says what that means.`);
-      record(job, o.noCall(job));
+      record(job, o.noCall(job), NO_CALL);
       continue;
     }
     if (job.cached !== null) {
       progress.replayed++;
-      record(job, o.read(job.cached, job));
+      const usage = store.cacheUsage(job.key);
+      record(job, o.read(job.cached, job), usage === null ? null : priced(usage));
       continue;
     }
 
-    let text: string | null = null;
-    for (let attempt = 0; text === null; attempt++) {
+    let answer: { text: string; cost: CallCost } | null = null;
+    for (let attempt = 0; answer === null; attempt++) {
       if (o.sentToday + progress.sent >= judge.freeTierLimits.requestsPerDay) {
         return stopped({ reason: "daily", message: `${judge.freeTierLimits.requestsPerDay} judge calls sent in the last 24 hours: that's the configured daily limit.` });
       }
@@ -132,7 +144,7 @@ export async function runJudgeCalls<J extends JudgeJob, R>(o: {
       lastSentAt = clock.now();
       try {
         progress.sent++;
-        text = await send(job, job.input);
+        answer = await send(job, job.input);
         failuresInARow = 0;
       } catch (error) {
         const failure = classifyFailure(error, o.describeError);
@@ -155,7 +167,7 @@ export async function runJudgeCalls<J extends JudgeJob, R>(o: {
         break;
       }
     }
-    if (text !== null) record(job, o.read(text, job));
+    if (answer !== null) record(job, o.read(answer.text, job), answer.cost);
   }
-  return { results, sent: progress.sent, stop: null };
+  return { results, sent: progress.sent, uncosted: uncosted(), stop: null };
 }

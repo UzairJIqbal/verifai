@@ -50,3 +50,6 @@ export const gateRecordSchema = z.object({
   checks: z.array(z.object({ id: z.string(), label: z.string(), pass: z.boolean(), detail: z.string() })),
 });
 export type GateRecord = z.infer<typeof gateRecordSchema>;
+
+// The id of a gate's section on the gates page, so other pages can link to it.
+export const gateAnchor = (g: Pick<GateRecord, "name" | "decidedAt">): string => `gate-${g.name}-${g.decidedAt.replace(/[^0-9]/g, "").slice(0, 14)}`;
