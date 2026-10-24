@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { EmptyState, PageHeading } from "@/components/shell/empty-state";
 import { LoadError } from "@/components/runs/load-error";
@@ -15,15 +16,13 @@ import { latestTags } from "@/src/review/report";
 import { TASK_WRONG, trialKey, type Note, type Taxonomy } from "@/src/review/schema";
 import { loadTasks } from "@/src/tasks/load";
 import type { Task } from "@/src/tasks/schema";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Review" };
 
 export default function ReviewPage() {
-  if (!isLocalOnlyEnabled()) {
-    return (
-      <EmptyState title="The review queue only runs on your own machine.">
-        It writes your notes into the repository, so it&apos;s turned off on the deployed site. Clone the repository and run <code>pnpm dev</code> to use it.
-      </EmptyState>
-    );
-  }
+  // Deployed, the page doesn't exist: it writes into the repository.
+  if (!isLocalOnlyEnabled()) notFound();
   return (
     <Suspense fallback={<p className="text-muted-foreground">Finding the next failure to review…</p>}>
       <LiveReview />

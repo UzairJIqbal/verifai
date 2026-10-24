@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { Suspense } from "react";
+import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { EmptyState, PageHeading } from "@/components/shell/empty-state";
 import { LoadError } from "@/components/runs/load-error";
@@ -14,15 +15,13 @@ import { trialKey, type Label } from "@/src/labels/schema";
 import { isLocalOnlyEnabled } from "@/src/local";
 import { JUDGE_CRITERION_TEXT } from "@/src/results/judge-text";
 import { getShopToday, SEED_DB_PATH } from "@/src/shop/db";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Labelling" };
 
 export default function LabellingPage() {
-  if (!isLocalOnlyEnabled()) {
-    return (
-      <EmptyState title="Labelling only runs on your own machine.">
-        It writes your labels into the repository, so it&apos;s turned off on the deployed site. Clone the repository and run <code>pnpm dev</code> to use it.
-      </EmptyState>
-    );
-  }
+  // Deployed, the page doesn't exist: it writes into the repository.
+  if (!isLocalOnlyEnabled()) notFound();
   return (
     <Suspense fallback={<p className="text-muted-foreground">Finding the next trial to label…</p>}>
       <LiveLabelling />

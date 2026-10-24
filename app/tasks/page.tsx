@@ -5,6 +5,7 @@ import { describeFact } from "@/src/graders/reply";
 import { isLocalOnlyEnabled } from "@/src/local";
 import { loadTasks, type LoadedTasks } from "@/src/tasks/load";
 import { CATEGORIES } from "@/src/tasks/schema";
+import type { Metadata } from "next";
 
 type Loaded = { ok: true; data: LoadedTasks } | { ok: false; error: string };
 
@@ -18,6 +19,8 @@ function load(): Loaded {
 
 // Read through the loader, like everything else, so only dev tasks reach this
 // page. The holdout is a count per category and nothing more.
+export const metadata: Metadata = { title: "Tasks" };
+
 export default function TasksPage() {
   const loaded = load();
   if (!loaded.ok) {

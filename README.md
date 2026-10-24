@@ -1,52 +1,122 @@
 # VerifAI
 
-**An evaluation system for a tool-using customer-support agent.**
+<!--
+  SKELETON. Every ‹TBD …› below is a number still to be filled in from the
+  file it names. A number that has no results file behind it comes out, along
+  with its sentence. Each one carries its sample size and error bar, and links
+  to its evidence. Delete this comment when the last ‹TBD› is gone.
+-->
 
-A small AI agent answers customers of a made-up phone-accessories shop, *Volt & Case*, using tools over a SQLite database and a written policy. VerifAI runs that agent on a fixed set of tasks many times, records every step, checks the results with code wherever it can, counts hallucinations, and uses the failures to improve the agent without breaking what already worked.
+**A customer-support agent for a made-up phone-accessories shop, and the system that checks it:** ‹TBD: N tasks — evidence: `evals/tasks.jsonl`›, an AI judge that agrees with hand labels at κ = ‹TBD: κ, n labels — evidence: `docs/judge-validation.md`› (κ, Cohen's kappa, is agreement beyond what chance would give; 1 is perfect), and holdout success from ‹TBD: first promoted version, % (95% CI), n tasks × k tries — evidence: `results/‹run›/report.json`› to ‹TBD: last promoted version, same — evidence: `results/gates/‹gate›.json`› over ‹TBD: N iterations — evidence: `CHANGELOG.md`›, with no category getting worse.
 
-The agent is deliberately plain. The grading system is the project.
+‹TBD: improvement chart, holdout success per promoted version with error bars — evidence: `results/gates/`›
 
-> **Status: Phase 1 of 14 done.** The shop, the policy, the agent's tools and loop, and a terminal chat work. The runner, graders, statistics and dashboard come in later phases.
+**Live dashboard:** ‹TBD: Vercel link›. It's a read-only snapshot of the committed results; runs happen locally.
 
-## What works today
+**Video (2 minutes):** ‹TBD: link›. A failing trace, its label, the fix, and the gate passing.
 
-- **A seeded shop.** 30 customers, 80 orders across processing, shipped and delivered, partial refunds, and orders over Rs 10,000. The seed is byte-for-byte reproducible, and the shop's "today" is a frozen date stored in the database, so the 14-day refund rule gives the same answer next month.
-- **A written policy** of eight rules that the agent reads in its system prompt.
-- **Seven tools** with Zod-validated inputs: find a customer, list their orders, get an order, change an address, cancel, refund, and transfer to a human. Hard limits are enforced by the tools themselves. Rules that need judgement, such as sending large refunds to a person, are left to the agent so they can be graded.
-- **A hand-written agent loop.** One model call per step and at most 12 steps, with every step reported as it happens. The AI SDK never runs the tool loop on its own, so nothing happens that isn't recorded.
-- **A terminal chat** on a fresh copy of the shop every time, printing each model reply, tool call and result live.
+## How it works
 
-## Quick start
+A customer writes in ("cancel my order", "I want a refund", "change my address"), and the agent uses tools to look things up in the shop's SQLite database and make changes, following a written policy. The agent is deliberately plain. The grading system is the project.
+
+Questions go in, the agent answers using the shop's database, every step is recorded, code checks the result, the failures show what to fix, and a locked test decides whether the fix really helped.
+
+```
+tasks.jsonl ──► runner ──► agent ⇄ tools ⇄ shop.db (fresh copy per try)
+                  │
+                  ▼
+            trajectories (SQLite + Langfuse)
+                  │
+                  ▼
+   code graders → trajectory graders → hallucination checks → AI judge
+                  │
+                  ▼
+     report + diff (results/)  ──►  dashboard (Next.js + Recharts)
+                  │
+                  ▼
+  read failures → name them → fix the biggest one → gate on dev + holdout
+                  │                                     │
+                  └──── new regression tasks ◄──────────┘
+```
+
+- **Tasks.** Each says what the customer writes and what the database must look like afterwards. The grader compares the whole database against the seed: a correct refund plus an accidental address change is a fail.
+- **Runs.** Every task is tried ‹TBD: tries per task — evidence: `verifai.config.json` → `runner.triesPerTask`› times, each on a fresh copy of the shop, because the agent doesn't behave the same way every time. Every model message, tool call, result, token count and latency is saved.
+- **Grading.** Code first: the database changes, the facts the reply must state, the tools called, the eight policy rules, steps against the reference. An AI judge only for what code can't see (was a refusal explained, was the question answered, was the tone polite), each pass or fail against a written rubric with a one-line reason. A try succeeds when every outcome grader passes; the rest are reported beside it, not folded into one score.
+
+## Hallucination, defined so it can be counted
+
+- **Fabricated entity**: an order number, customer id, amount, date or email in the reply or a tool's inputs that never appeared in a tool result or the customer's messages. Found by code.
+- **Fabricated action**: the reply says something happened ("I've refunded you") with no successful matching tool call. Found by code, from a fixed list of action phrases mapped to tools.
+- **Unsupported claim**: a factual statement in the reply that nothing in the trajectory supports.
+- **Contradicted claim**: a statement that conflicts with what the tools returned.
+
+For the last two, the reply is split into single claims and the judge labels each one against the tool results.
+
+‹TBD: the four rates for the last promoted version, each with n and error bar — evidence: `results/‹run›/report.json` → `hallucination`›
+
+## Statistics
+
+- **pass^k** is the chance that all k tries of a task succeed: reliability, because a customer gets one try. **pass@k**, the chance at least one does, sits beside it to show the gap.
+- **Error bars** come from a bootstrap over tasks: resample the tasks with replacement thousands of times, recompute, and keep the middle 95%. The random generator is seeded, so the same run always prints the same interval.
+- **Comparisons are paired**: the same tasks under both versions, McNemar's exact test on per-task success, and a paired bootstrap on the difference.
+- **Flip rate is the noise floor**: the same configuration run twice with the cache skipped, counting how many outcomes changed. A change smaller than that isn't called an improvement. ‹TBD: noise floor, points — evidence: `results/noise-floors.jsonl`›
+
+## How the holdout is protected
+
+About a third of the tasks (‹TBD: holdout count of N — evidence: `evals/holdout.lock.json`›) were locked away at the start. A lock file records their fingerprint; if one changes, every command refuses to run until it's deliberately re-frozen with a changelog line saying why. Only the gate reads holdout trajectories, and the dashboard shows holdout results as numbers only until a version is promoted. Nothing from the holdout ever goes into a fix: no prompt edit, exemplar, tool description, regression task or judge prompt.
+
+## Stack
+
+TypeScript (strict), the Vercel AI SDK for single model calls (the tool loop is our own, so every step is recorded), Groq for the agent and Gemini for the judge (both free tiers), SQLite through `node:sqlite`, Zod at every boundary, Vitest, Langfuse Cloud for traces, and Next.js 16 with Tailwind, shadcn/ui and Recharts for the dashboard.
+
+## Running it locally
 
 Needs Node 22.13 or newer and pnpm.
 
 ```bash
 pnpm install
-echo "GROQ_API_KEY=your-key" >> .env.local   # free key: https://console.groq.com/keys
-pnpm seed                                     # builds data/shop.db
-pnpm chat                                     # talk to the agent
+pnpm seed                    # builds the seeded shop, data/shop.db
+pnpm test                    # no model calls
+pnpm eval --replay           # replays the recorded trajectories and re-grades them with no key
+pnpm dev                     # the dashboard, at http://localhost:3000
 ```
 
-Try: *"I'm aisha.khan@example.com, please cancel order 1001."*
+`pnpm eval --replay [runId]` replays the recorded trajectories of a committed dev run (the newest, if no id is given) and re-grades them with no key. Each try's recorded tool calls run again on a fresh copy of the shop, today's code graders mark the result, and the claim checks and judge verdicts are kept as recorded. No model is called. It prints the report with its error bars and exits with an error if any try grades differently from the committed file.
 
-| Command          | What it does                                         |
-| ---------------- | ---------------------------------------------------- |
-| `pnpm seed`      | Builds the seeded shop database                      |
-| `pnpm chat`      | Chats with the agent in the terminal                 |
-| `pnpm test`      | Runs the tests (no model calls)                      |
-| `pnpm typecheck` | Checks the types                                     |
+To run the agent yourself, copy `.env.example` to `.env.local` and add the keys it lists (each line says where to get one). Then:
 
-## Configuration
+```bash
+pnpm chat                    # talk to the agent in the terminal
+pnpm eval --smoke            # one task per category: checks the machinery, never a score
+pnpm eval                    # the full dev split, printing success with its error bar
+```
 
-The agent's provider, model, temperature, step limit and timeout are in [`verifai.config.json`](verifai.config.json), never in code. The system prompt and tool descriptions are versioned files under [`agent/`](agent/), and the agent reports which version it runs.
+A full `pnpm eval` spends ‹TBD: model calls per full run — evidence: a finished run's `report.json` → `totals`› calls. It stops cleanly at a provider's daily allowance, and running it again carries on from the next unfinished try.
 
-## Stack
+Model names, temperature and limits are in [`verifai.config.json`](verifai.config.json), never in code. The system prompt and tool descriptions are versioned files under [`agent/`](agent/), and every run saves which versions it used.
 
-TypeScript (strict) · Vercel AI SDK · Groq for the agent, Gemini for the judge (both free tiers) · SQLite via `node:sqlite` · Zod · Vitest · tsx · Next.js 16 for the dashboard.
+## Free-tier limits
 
-## How it's built
+Everything runs on free plans: Groq, Cloudflare Workers AI, Gemini, Langfuse Cloud and Vercel Hobby.
 
-Spec-driven, one phase at a time. Each phase has a written spec with an acceptance check, and is committed only after that check passes.
+| Provider | Used for | Daily allowance |
+| -------- | -------- | --------------- |
+| Groq | the agent | ‹TBD — evidence: `verifai.config.json` → `agent.pool[groq].freeTierLimits`› |
+| Cloudflare Workers AI | the agent's second provider | ‹TBD — evidence: `verifai.config.json` → `agent.pool[cloudflare].freeTierLimits`› |
+| Gemini | the judge and claim checks | ‹TBD — evidence: `verifai.config.json` → `judge.freeTierLimits`› |
+
+## The deployed dashboard
+
+The live site is a read-only snapshot of the files in `results/`. The pages that call a model or write files (the playground, labelling, the review queue) are hidden there, and nothing on it can start a run.
+
+## How it was built
+
+Spec-driven, one phase at a time, each committed only after its acceptance check passed.
 
 - [`docs/project-specs.md`](docs/project-specs.md): what the project is and the reasoning behind every decision
 - [`docs/specs/`](docs/specs/): one spec per phase
+- [`CHANGELOG.md`](CHANGELOG.md): every promoted version and why
+
+## Licence
+
+[MIT](LICENSE).

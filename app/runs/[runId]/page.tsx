@@ -13,8 +13,15 @@ import { JudgeSection } from "@/components/runs/judge-report";
 import { OUTCOME_GRADERS } from "@/src/graders";
 import { readRun, type RunFiles } from "@/src/results/read";
 import { trialTags } from "@/src/stats/graders";
+import type { Metadata } from "next";
 
 const isOutcome = (grader: string) => OUTCOME_GRADERS.some((g) => g === grader);
+
+// From the address alone: the tab says which run before its files are read.
+export async function generateMetadata({ params }: { params: Promise<{ runId: string }> }): Promise<Metadata> {
+  const { runId } = await params;
+  return { title: `Run ${runId}` };
+}
 
 // The run id is only known per request, so it's read inside Suspense.
 export default function RunPage({ params }: { params: Promise<{ runId: string }> }) {

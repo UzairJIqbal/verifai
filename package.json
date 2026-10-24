@@ -2,6 +2,9 @@
   "name": "verifi",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,7 +13,7 @@
     "seed": "tsx scripts/seed.ts",
     "chat": "tsx scripts/chat.ts",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "eval": "tsx scripts/eval.ts",
     "noise": "tsx scripts/noise.ts",
     "compare": "tsx scripts/compare.ts",

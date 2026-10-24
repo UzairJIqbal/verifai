@@ -18,9 +18,14 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const DESCRIPTION = "Evaluating a customer-support agent for Volt & Case, a phone-accessories shop.";
+
+// No metadataBase: deployed, Next takes the site's own address from Vercel for
+// the Open Graph image, and locally it falls back to localhost.
 export const metadata: Metadata = {
-  title: "VerifAI",
-  description: "Evaluating a customer-support agent for Volt & Case, a phone-accessories shop.",
+  title: { default: "VerifAI", template: "%s · VerifAI" },
+  description: DESCRIPTION,
+  openGraph: { title: "VerifAI", description: DESCRIPTION, siteName: "VerifAI", type: "website" },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

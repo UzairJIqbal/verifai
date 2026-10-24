@@ -93,19 +93,26 @@ export function buildReport(run: StoredRun, trials: Trial[], finishedAt: string,
       },
       costUsd: sum((t) => t.costUsd),
     },
-    stats: c.smoke ? null : runStats(trials.map(outcomeRow)),
-    graders: c.smoke
-      ? null
-      : graderReport({
-          trials,
-          graders: GRADERS,
-          policyRules: POLICY_RULES,
-          tools: TOOL_NAMES,
-          referenceLength: new Map([...tasks].map(([id, task]) => [id, task.reference.length])),
-        }),
-    hallucination: c.smoke ? null : hallucinationReport(trials),
-    judge: c.smoke ? null : judgeReport(trials),
+    ...gradedSections(c.smoke, trials, tasks),
   });
+}
+
+// Everything in a report that comes from the tries' grades. A smoke run is
+// never a score, so it has none. `pnpm eval --replay` rebuilds these alone.
+export function gradedSections(smoke: boolean, trials: Trial[], tasks: Map<string, Task>) {
+  if (smoke) return { stats: null, graders: null, hallucination: null, judge: null };
+  return {
+    stats: runStats(trials.map(outcomeRow)),
+    graders: graderReport({
+      trials,
+      graders: GRADERS,
+      policyRules: POLICY_RULES,
+      tools: TOOL_NAMES,
+      referenceLength: new Map([...tasks].map(([id, task]) => [id, task.reference.length])),
+    }),
+    hallucination: hallucinationReport(trials),
+    judge: judgeReport(trials),
+  };
 }
 
 // A holdout try keeps its outcome and loses everything that could be learned

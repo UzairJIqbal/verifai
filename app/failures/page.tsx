@@ -5,6 +5,7 @@ import { draftedLine, shareText, taxonomyDoc, trialPath } from "@/src/review/doc
 import { readNotes, readTags, readTaxonomy, readTaxonomyDoc, REVIEW_FILES, shown, TAXONOMY_DOC } from "@/src/review/files";
 import { taxonomyReport, type TaxonomyReport } from "@/src/review/report";
 import { trialKey, type Taxonomy } from "@/src/review/schema";
+import type { Metadata } from "next";
 
 type Loaded = { ok: true; notes: number; taxonomy: Taxonomy | null; report: TaxonomyReport | null; docMatches: boolean } | { ok: false; error: string };
 
@@ -22,6 +23,8 @@ function load(): Loaded {
 }
 
 // Read from the committed files under evals/review/, so this page is the same here and deployed.
+export const metadata: Metadata = { title: "Failures" };
+
 export default function FailuresPage() {
   const loaded = load();
   const heading = (

@@ -8,6 +8,21 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [{ source: "/", destination: isLocalOnlyEnabled() ? "/playground" : "/runs", permanent: false }];
   },
+  // The pages read the committed record at request time, from paths the build
+  // can't follow (they're marked turbopackIgnore). Deployed, a page that
+  // renders on request has only the files listed here: never data/ (the shop
+  // and the eval store) or an .env file.
+  outputFileTracingIncludes: {
+    "/*": [
+      "./results/**/*",
+      "./evals/**/*",
+      "./agent/**/*",
+      "./judges/**/*",
+      "./verifai.config.json",
+      "./docs/failure-taxonomy.md",
+      "./CHANGELOG.md",
+    ],
+  },
   cacheComponents: true,
   partialPrefetching: true,
   turbopack: {

@@ -9,11 +9,14 @@ import type { Report } from "@/src/results/schema";
 import { interval, pct, points, pValue, VERDICT_WORDS } from "@/src/stats/format";
 import { taskOutcomes, outcomeRow, type ComparisonRow } from "@/src/stats/report";
 import type { Verdict } from "@/src/stats/stats";
+import type { Metadata } from "next";
 
 type Search = { [key: string]: string | string[] | undefined };
 const one = (v: string | string[] | undefined) => (typeof v === "string" && v !== "" ? v : null);
 
 // Which runs to compare is only known per request, so it's read inside Suspense.
+export const metadata: Metadata = { title: "Compare" };
+
 export default function ComparePage({ searchParams }: { searchParams: Promise<Search> }) {
   return (
     <>

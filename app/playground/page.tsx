@@ -10,6 +10,9 @@ import { getShopToday, SEED_DB_PATH } from "@/src/shop/db";
 import { isLocalOnlyEnabled } from "@/src/local";
 import { listPickableCustomers, type PickableCustomer } from "@/src/playground/snapshot";
 import { loadTasks } from "@/src/tasks/load";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Playground" };
 
 export default function PlaygroundPage({ searchParams }: PageProps<"/playground">) {
   if (!isLocalOnlyEnabled()) {

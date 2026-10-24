@@ -3,6 +3,7 @@ import { EmptyState, PageHeading } from "@/components/shell/empty-state";
 import { listGates } from "@/src/gate/record";
 import { gateAnchor, type GateRecord, type GateRow } from "@/src/gate/schema";
 import { CATEGORIES } from "@/src/tasks/schema";
+import type { Metadata } from "next";
 
 const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
 const pts = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}`;
@@ -110,6 +111,8 @@ function Gate({ g }: { g: GateRecord }) {
 }
 
 // Read from results/gates/, so this page is the same here and deployed.
+export const metadata: Metadata = { title: "Gates" };
+
 export default function GatesPage() {
   const heading = (
     <PageHeading title="Gates">

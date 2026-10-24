@@ -3,6 +3,7 @@ import { EmptyState, PageHeading } from "@/components/shell/empty-state";
 import { formatWhen } from "@/components/runs/format";
 import { interval, pct } from "@/src/stats/format";
 import { listRuns, type RunListing } from "@/src/results/read";
+import type { Metadata } from "next";
 
 type Loaded = { ok: true; data: RunListing } | { ok: false; error: string };
 
@@ -15,6 +16,8 @@ function load(): Loaded {
 }
 
 // Read from results/ alone, so this page is the same here and deployed.
+export const metadata: Metadata = { title: "Runs" };
+
 export default function RunsPage() {
   const loaded = load();
   if (!loaded.ok) {

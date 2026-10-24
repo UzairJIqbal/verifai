@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { EmptyState, PageHeading } from "@/components/shell/empty-state";
 import { LoadError } from "@/components/runs/load-error";
@@ -9,15 +10,13 @@ import { trialPath } from "@/src/review/doc";
 import { readNotes, readTags, readTaxonomy, REVIEW_FILES, shown } from "@/src/review/files";
 import { latestTags, taxonomyReport, type TaxonomyReport } from "@/src/review/report";
 import { trialKey, type Taxonomy } from "@/src/review/schema";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: "Tag notes" };
 
 export default function TagPage() {
-  if (!isLocalOnlyEnabled()) {
-    return (
-      <EmptyState title="Tagging only runs on your own machine.">
-        It writes into the repository, so it&apos;s turned off on the deployed site. Clone the repository and run <code>pnpm dev</code> to use it.
-      </EmptyState>
-    );
-  }
+  // Deployed, the page doesn't exist: it writes into the repository.
+  if (!isLocalOnlyEnabled()) notFound();
   return (
     <Suspense fallback={<p className="text-muted-foreground">Reading your notes…</p>}>
       <LiveTagging />

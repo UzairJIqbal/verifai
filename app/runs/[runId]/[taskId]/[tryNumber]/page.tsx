@@ -11,8 +11,15 @@ import { LoadError } from "@/components/runs/load-error";
 import { TrajectorySteps } from "@/components/runs/trajectory-steps";
 import { VerdictSummary } from "@/components/runs/verdicts";
 import { readRun, type RunFiles } from "@/src/results/read";
+import type { Metadata } from "next";
 
 type Params = { runId: string; taskId: string; tryNumber: string };
+
+// From the address alone: the tab says which run before its files are read.
+export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
+  const { runId, taskId, tryNumber } = await params;
+  return { title: `${taskId}, try ${tryNumber} · ${runId}` };
+}
 
 export default function TrajectoryPage({ params }: { params: Promise<Params> }) {
   return (

@@ -6,58 +6,22 @@
 // With no run id, the newest finished dev run that isn't a smoke run.
 import { relative } from "node:path";
 import { styleText } from "node:util";
-import { canonical } from "../src/canonical";
 import { loadConfig, PROJECT_ROOT } from "../src/config";
 import { poolSecrets } from "../src/agent/model";
 import { loadPolicy, loadToolDescriptions, offeredTools } from "../src/agent/versions";
-import { runTool, type ToolName } from "../src/agent/tools";
 import { pickFinishedRun } from "../src/eval/finished-run";
+import { replayTrial } from "../src/eval/replay";
 import { makeRedactor } from "../src/eval/redact";
 import { dim, fatal, printReport } from "../src/eval/session";
 import { EVAL_STORE_PATH, EvalStore } from "../src/eval/store";
 import { langfuseSecrets } from "../src/eval/tracing";
 import { judgeSecrets } from "../src/judge/model";
-import type { Trajectory, TrajectoryEvent } from "../src/eval/trajectory";
 import { gradeTry, outcomePassed } from "../src/graders";
 import { readShopFacts } from "../src/graders/shop-facts";
-import type { RecordedTrial, Step } from "../src/results/schema";
 import { writeResults } from "../src/results/write";
 import { getShopToday, openFreshShop } from "../src/shop/db";
-import { diffShops, dumpShop } from "../src/shop/diff";
 
 const USAGE = "Usage: pnpm regrade [runId]   (run ids are the folder names under results/)";
-
-// A recorded step is the event it was made from, with its cost added.
-const toEvent = (s: Step): TrajectoryEvent => s;
-
-// What the try left the shop looking like, from its own tool calls run again.
-// Tools are deterministic over the seed and the frozen date, so a different
-// outcome means the shop or a tool changed since the run, and its grades
-// would be about something that never happened.
-function replay(trial: RecordedTrial, offered: readonly ToolName[]): Trajectory {
-  const shop = openFreshShop();
-  try {
-    const ctx = { db: shop.db, today: getShopToday(shop.db) };
-    const before = dumpShop(shop.db);
-    const calls = new Map(trial.steps.flatMap((s) => (s.type === "tool-call" ? [[s.toolCallId, s] as const] : [])));
-    for (const s of trial.steps) {
-      if (s.type !== "tool-result") continue;
-      const call = calls.get(s.toolCallId);
-      if (!call) throw new Error(`${trial.taskId} try ${trial.tryNumber}: a ${s.toolName} result has no call.`);
-      const outcome = runTool(ctx, call.toolName, call.input, offered);
-      if (canonical(outcome) !== canonical(s.outcome)) {
-        throw new Error(
-          `${trial.taskId} try ${trial.tryNumber}: replaying ${call.toolName} ${canonical(call.input)} gave ${canonical(outcome)}, but the run recorded ${canonical(s.outcome)}. ` +
-            "The shop or a tool has changed since this run, so it can't be regraded. Run `pnpm eval` for a new one.",
-        );
-      }
-    }
-    if (trial.end === null) throw new Error(`${trial.taskId} try ${trial.tryNumber} has no end recorded.`);
-    return { events: trial.steps.map(toEvent), end: trial.end, changes: diffShops(before, dumpShop(shop.db)) };
-  } finally {
-    shop.dispose();
-  }
-}
 
 function main(): void {
   const args = process.argv.slice(2);
@@ -91,7 +55,7 @@ function main(): void {
       }
       const task = tasksById.get(trial.taskId);
       if (!task) throw new Error(`${run.id} has tries of ${trial.taskId}, which isn't a dev task.`);
-      const verdicts = gradeTry(task, replay(trial, offered), shop, policy);
+      const verdicts = gradeTry(task, replayTrial(trial, offered), shop, policy);
       const status = outcomePassed(verdicts) ? ("passed" as const) : ("failed" as const);
       if (status !== trial.status) changed++;
       return [{ taskId: trial.taskId, tryNumber: trial.tryNumber, status, verdicts }];
