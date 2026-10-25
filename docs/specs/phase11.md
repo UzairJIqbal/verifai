@@ -15,7 +15,7 @@ A taxonomy with counts and a top category to fix. Changing the prompt and rerunn
 - **Exemplar memory**, switchable in the config. Successful dev trajectories are stored with an embedding of their first customer message; at run time the two most similar are added to the prompt as examples.
 - **The gate command.** Runs the candidate and the current promoted version on dev and holdout, then decides:
   - holdout success improved by more than the noise floor, and the paired test agrees;
-  - no category dropped by more than the threshold in the config (5 points to start), on dev or holdout.
+  - no category dropped by more than the larger of 5 points and that category's own noise floor (scaled to its task count on that split), on dev or holdout. (Changed 2026-10-25 from a flat 5 points, decided before gate v3: measured luck moves categories 9 to 17 points. See DECISIONS.md D-002.)
   
   It prints a pass or fail table with each check, its numbers and intervals.
 - **Promote.** A passing candidate becomes the promoted version. Its holdout trajectories become readable on the dashboard.
@@ -29,6 +29,7 @@ A taxonomy with counts and a top category to fix. Changing the prompt and rerunn
 - **A failed gate changes nothing.** The promoted version stays, and the candidate's holdout trajectories stay hidden.
 - **Both versions run on the same dataset version** for the gate. If the dataset changed, the current version is rerun first.
 - The gate prints its call estimate and asks before running.
+- **The holdout must be able to show an improvement.** The paired test needs at least 6 holdout tasks flipping the same way, so if the promoted version fails fewer than 6 holdout tasks, no fix can pass. Then add fresh, harder tasks (written from the policy, never from failures or the holdout), split dev/holdout by the same fixed rule, before gating. (Added 2026-10-20: v1 failed only 3 of 15.)
 
 ## Acceptance check
 
