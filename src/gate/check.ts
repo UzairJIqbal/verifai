@@ -1,21 +1,27 @@
 // Whether a candidate passes. Pure: two comparisons in, a verdict with its
 // reasons out.
-import type { Comparison } from "../stats/report";
-import { CATEGORIES } from "../tasks/schema";
+import type { Comparison, Noise } from "../stats/report";
+import { CATEGORIES, type Category } from "../tasks/schema";
 
 export type GateCheck = { id: string; label: string; pass: boolean; detail: string };
-export type GateDecision = { pass: boolean; checks: GateCheck[] };
+export type DropLimits = Record<"dev" | "holdout", Partial<Record<Category, number>>>;
+// `dropLimits` are the limits the checks used, so the record saves exactly those.
+export type GateDecision = { pass: boolean; checks: GateCheck[]; dropLimits: DropLimits };
 
 const pts = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}`;
 
 /**
- * How many points a category may drop before the gate fails it: its own noise
- * floor on that split (already rescaled to its task count), but never less
- * than `minPoints`. A flat limit below the floor failed candidates on luck
- * (D-002). No floor means the minimum, the strict side.
+ * How many points a category may drop before the gate fails it: the promoted
+ * version's noise floor for it on that split (already rescaled to its task
+ * count), but never less than `minPoints`. A flat limit below the floor failed
+ * candidates on luck (D-002). No floor means the minimum, the strict side.
+ * Rounded down to 0.1 points, so the limit shown is the limit applied and
+ * rounding can only make it stricter.
  */
 export function categoryDropLimit(floor: number | null, minPoints: number): number {
-  return floor === null || Number.isNaN(floor) ? minPoints : Math.max(minPoints, floor * 100);
+  if (floor === null || Number.isNaN(floor)) return minPoints;
+  // The nudge keeps float error (16.7 stored as 16.6999…) from rounding a whole tenth away.
+  return Math.max(minPoints, Math.floor(floor * 1000 + 1e-6) / 10);
 }
 
 /**
@@ -24,10 +30,16 @@ export function categoryDropLimit(floor: number | null, minPoints: number): numb
  * holdout, drops by more than its limit (`categoryDropLimit`, at least
  * `maxDropPoints`). Both comparisons are promoted (A) against candidate (B)
  * on the same tasks.
+ *
+ * `promotedNoise` is the promoted version's floor rescaled to each split. The
+ * limits come from it alone: the comparisons' floors are the wider of the two
+ * versions', which is strict for an improvement but would let a noisy
+ * candidate's own luck widen the room it's given to drop.
  */
-export function decideGate(args: { dev: Comparison; holdout: Comparison; maxDropPoints: number }): GateDecision {
-  const { dev, holdout, maxDropPoints } = args;
+export function decideGate(args: { dev: Comparison; holdout: Comparison; promotedNoise: Record<"dev" | "holdout", Noise>; maxDropPoints: number }): GateDecision {
+  const { dev, holdout, promotedNoise, maxDropPoints } = args;
   const checks: GateCheck[] = [];
+  const dropLimits: DropLimits = { dev: {}, holdout: {} };
 
   for (const [split, c] of [["dev", dev], ["holdout", holdout]] as const) {
     const unmatched = c.onlyInA.length + c.onlyInB.length;
@@ -53,8 +65,15 @@ export function decideGate(args: { dev: Comparison; holdout: Comparison; maxDrop
       const row = c.byCategory[category];
       if (row === undefined) continue;
       const drop = -row.difference.value * 100;
-      const limit = categoryDropLimit(row.floor, maxDropPoints);
-      const from = limit > maxDropPoints ? "its noise floor" : `the ${maxDropPoints}-point minimum`;
+      const floor = promotedNoise[split].byCategory[category]?.floor ?? null;
+      const limit = categoryDropLimit(floor, maxDropPoints);
+      dropLimits[split][category] = limit;
+      const from =
+        floor === null || Number.isNaN(floor)
+          ? `the ${maxDropPoints}-point minimum (no noise floor measured for this category)`
+          : limit > maxDropPoints
+            ? "the promoted version's noise floor"
+            : `the ${maxDropPoints}-point minimum`;
       checks.push({
         id: `${split}-${category}`,
         label: `${split} ${category}: drops no more than ${limit.toFixed(1)} points`,
@@ -64,5 +83,5 @@ export function decideGate(args: { dev: Comparison; holdout: Comparison; maxDrop
       });
     }
   }
-  return { pass: checks.every((c) => c.pass), checks };
+  return { pass: checks.every((c) => c.pass), checks, dropLimits };
 }

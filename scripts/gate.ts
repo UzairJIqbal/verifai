@@ -2,7 +2,8 @@
 // and on holdout, same dataset, same tasks. Prints what it will spend and asks
 // first. It passes only if holdout success beats the noise floor with McNemar
 // agreeing, and no category drops by more than its limit on either split: the
-// config's minimum or the category's own noise floor, whichever is larger. A pass promotes the candidate (config, agent/promoted.json, changelog, its holdout tries
+// config's minimum or the promoted version's noise floor for the category,
+// whichever is larger. A pass promotes the candidate (config, agent/promoted.json, changelog, its holdout tries
 // readable); a fail changes nothing but its own record.
 //
 // This is the only code that loads holdout tasks.
@@ -223,7 +224,11 @@ async function main(): Promise<void> {
   const rows = (runId: string, byId: Map<string, Task>) => withTaskInfo(last.store.loadTrials(runId), byId).map(outcomeRow);
   const devCmp = compareRuns(rows(runs.promotedDev, devById), rows(runs.candidateDev, devById), devNoise);
   const holdoutCmp = compareRuns(rows(runs.promotedHoldout, holdoutById), rows(runs.candidateHoldout, holdoutById), holdoutNoise);
-  const decision = decideGate({ dev: devCmp, holdout: holdoutCmp, maxDropPoints: config.gate.maxCategoryDropPoints });
+  // Category drop limits use the promoted version's floor only (D-002): the
+  // candidate is what's being judged, so its own luck mustn't widen them.
+  const promotedMeasured: Noise = { overall: promotedFloor.floor.overall, byCategory: promotedFloor.floor.byCategory };
+  const promotedNoise = { dev: rescaleNoise(promotedMeasured, counts(dev.tasks)), holdout: rescaleNoise(promotedMeasured, counts(holdout.tasks)) };
+  const decision = decideGate({ dev: devCmp, holdout: holdoutCmp, promotedNoise, maxDropPoints: config.gate.maxCategoryDropPoints });
 
   printComparison("Holdout", holdoutCmp, "estimated from dev");
   printComparison("Dev", devCmp, "measured on dev");
@@ -253,8 +258,8 @@ async function main(): Promise<void> {
       tasks: source.floor.overall.tasks,
       overall: source.floor.overall.floor,
     },
-    dev: gateComparison(devCmp, config.gate.maxCategoryDropPoints),
-    holdout: gateComparison(holdoutCmp, config.gate.maxCategoryDropPoints),
+    dev: gateComparison(devCmp, decision.dropLimits.dev),
+    holdout: gateComparison(holdoutCmp, decision.dropLimits.holdout),
     maxCategoryDropPoints: config.gate.maxCategoryDropPoints,
     checks: decision.checks,
   };

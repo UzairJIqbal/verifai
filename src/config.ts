@@ -161,8 +161,8 @@ export const configSchema = z.strictObject({
   embedding: embeddingSchema,
   gate: z.strictObject({
     // A candidate fails if any category's success rate drops by more than
-    // this many points or that category's noise floor, whichever is larger,
-    // on dev or holdout (D-002).
+    // this many points or the promoted version's noise floor for that
+    // category, whichever is larger, on dev or holdout (D-002).
     maxCategoryDropPoints: z.number().nonnegative(),
   }),
   judge: judgeSchema,

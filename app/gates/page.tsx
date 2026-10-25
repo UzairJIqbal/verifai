@@ -114,7 +114,7 @@ export default function GatesPage() {
   const heading = (
     <PageHeading title="Gates">
       Each candidate against the promoted version on dev and holdout. A candidate passes only if holdout success beats the noise floor with McNemar agreeing, and no category
-      drops more than its limit on either split: the larger of the set minimum and that category&apos;s own noise floor. McNemar p is the chance of a split of task outcomes this uneven if nothing had really changed.
+      drops more than its limit on either split: the larger of the set minimum and the promoted version&apos;s noise floor for that category. McNemar p is the chance of a split of task outcomes this uneven if nothing had really changed.
     </PageHeading>
   );
   let listing;
