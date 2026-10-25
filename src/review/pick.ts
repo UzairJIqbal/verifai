@@ -1,7 +1,7 @@
 // Which failed try you review next, read from the results files. Only failed
 // tries from finished dev runs that aren't smoke runs: a holdout try is never
 // offered, and an errored one didn't fail on the agent's own account.
-import { listRuns, readRun } from "../results/read";
+import { devTrials, listRuns, readRun } from "../results/read";
 import type { Trial } from "../results/schema";
 import { byReviewOrder } from "./order";
 import { trialKey, type Note, type TrialRef } from "./schema";
@@ -22,8 +22,9 @@ export function reviewPool(): ReviewPool {
       problems.push(error instanceof Error ? error.message : String(error));
       continue;
     }
-    if (files === null || files.split !== "dev") continue;
-    for (const t of files.trials) {
+    const devTries = devTrials(files);
+    if (devTries === null) continue;
+    for (const t of devTries) {
       if (t.status === "failed") trials.push({ runId: report.runId, taskId: t.taskId, tryNumber: t.tryNumber, datasetVersion: report.datasetVersion, trial: t });
     }
   }

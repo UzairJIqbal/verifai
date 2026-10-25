@@ -20,7 +20,11 @@
     "judge:bias": "tsx scripts/judge-bias.ts",
     "agreement": "tsx scripts/agreement.ts",
     "taxonomy": "tsx scripts/taxonomy.ts",
-    "tasks:freeze": "tsx scripts/freeze-tasks.ts"
+    "tasks:freeze": "tsx scripts/freeze-tasks.ts",
+    "task:new": "tsx scripts/task-new.ts",
+    "task:add": "tsx scripts/task-add.ts",
+    "exemplars:add": "tsx scripts/exemplars-add.ts",
+    "gate": "tsx scripts/gate.ts"
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.94",

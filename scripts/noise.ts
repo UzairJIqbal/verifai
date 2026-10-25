@@ -2,22 +2,14 @@
 // changed, to see how much the score moves on its own. Prints the cost and asks
 // first; stops cleanly at the daily limit and carries the same pair on next
 // time. The flip rate and noise floor are saved for this configuration.
-import { createInterface } from "node:readline/promises";
 import { styleText } from "node:util";
-import { budgetFor, compact, dim, executeRun, fatal, n, openSession, printProviders, remainingTries } from "../src/eval/session";
+import { ask, budgetFor, compact, dim, executeRun, fatal, n, openSession, printProviders, remainingTries } from "../src/eval/session";
 import { measureNoise, outcomeRow } from "../src/stats/report";
 import { pct, points } from "../src/stats/format";
 import { appendNoiseFloor, withTaskInfo } from "../src/results/write";
 import type { NoiseFloor } from "../src/results/schema";
 
 const COMMAND = "pnpm noise";
-
-async function ask(question: string): Promise<boolean> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout });
-  const answer = await rl.question(question);
-  rl.close();
-  return /^y(es)?$/i.test(answer.trim());
-}
 
 async function main(): Promise<void> {
   if (process.argv.length > 2) fatal(`pnpm noise takes no options.\nUsage: ${COMMAND}`);

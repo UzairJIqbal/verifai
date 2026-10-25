@@ -1,7 +1,7 @@
 import { generateText, tool, type AssistantModelMessage, type LanguageModel, type ModelMessage, type ToolResultPart, type ToolSet } from "ai";
 import { z } from "zod";
 import { runTool, SHOP_TOOLS, type ToolContext, type ToolName, type ToolOutcome } from "./tools";
-import { offeredTools, type AgentVersion, type ToolDescriptions } from "./versions";
+import { offeredTools, preCheckOf, type AgentVersion, type ToolDescriptions } from "./versions";
 import type { ReasoningEffort } from "../config";
 
 export type ModelUsage = { inputTokens: number; cachedInputTokens: number; outputTokens: number };
@@ -93,6 +93,7 @@ export async function runAgentTurn(
   const tools = buildToolSet(setup.version.toolDescriptions);
   const toolSpecs = describeTools(setup.version.toolDescriptions);
   const offered = offeredTools(setup.version.toolDescriptions);
+  const preCheck = preCheckOf(setup.version);
 
   // One model call. No stopWhen, so the SDK never runs a step of its own.
   const send = async (model: LanguageModel): Promise<ModelStep> => {
@@ -146,7 +147,7 @@ export async function runAgentTurn(
       onEvent({ type: "tool-call", step, toolCallId: toolCall.toolCallId, toolName: toolCall.toolName, input: toolCall.input });
       const toolStarted = Date.now();
       const began = performance.now();
-      const outcome = runTool(ctx, toolCall.toolName, toolCall.input, offered);
+      const outcome = runTool(ctx, toolCall.toolName, toolCall.input, offered, preCheck);
       const toolLatency = Math.round(performance.now() - began);
       onEvent({
         type: "tool-result",

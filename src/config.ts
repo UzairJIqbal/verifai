@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import { parseEnv } from "node:util";
 import { z } from "zod";
 import { REASONING_EFFORTS } from "./reasoning-effort";
+import { VALIDATION_NAMES } from "./agent/validation-names";
 
 // The nearest folder at or above where the command was started that holds the
 // config. Not worked out from this file's own path: inside the Next.js build
@@ -26,7 +27,7 @@ export type AgentProvider = (typeof AGENT_PROVIDERS)[number];
 
 export { REASONING_EFFORTS, type ReasoningEffort } from "./reasoning-effort";
 
-const versionName = z.string().regex(/^v\d+$/, "a version name looks like v1, v2, …");
+export const versionName = z.string().regex(/^v\d+$/, "a version name looks like v1, v2, …");
 
 // One provider's free-tier limits for this model. They change, so the config
 // says when and where they were last read.
@@ -41,6 +42,9 @@ const freeTierLimits = z.strictObject({
   daily: z.strictObject({
     unit: z.string().min(1),
     allowance: z.number().positive(),
+    // When the day's count starts again. "rolling 24 hours" where the provider
+    // doesn't say: it never counts less than a fixed reset would.
+    resets: z.enum(["00:00 UTC", "rolling 24 hours"]),
     unitsPerMillionTokens: z.strictObject({
       input: z.number().nonnegative(),
       cachedInput: z.number().nonnegative(),
@@ -94,6 +98,19 @@ const judgeSchema = z.strictObject({
 });
 export type JudgeConfig = z.infer<typeof judgeSchema>;
 
+// The embedding model: for spotting near-duplicate regression tasks and for
+// exemplar memory. Gemini, on the judge's key.
+export const EMBEDDING_PROVIDERS = ["gemini"] as const;
+const embeddingSchema = z.strictObject({
+  provider: z.enum(EMBEDDING_PROVIDERS),
+  model: z.string().min(1),
+  dimensions: z.number().int().positive(),
+  // A new task this similar (cosine) to an existing dev task is shown as a
+  // near-duplicate before it's saved.
+  nearDuplicateSimilarity: z.number().min(0).max(1),
+});
+export type EmbeddingConfig = z.infer<typeof embeddingSchema>;
+
 export const configSchema = z.strictObject({
   agent: z
     .strictObject({
@@ -132,8 +149,21 @@ export const configSchema = z.strictObject({
     // the machinery works, never a score.
     smokeTasks: z.array(z.string().min(1)).min(1),
   }),
+  // The promoted agent version: its name and the four things a candidate may
+  // change, one at a time. Only a passing gate rewrites these.
+  agentVersion: versionName,
   promptVersion: versionName,
   toolDescriptionsVersion: versionName,
+  // A check run before a tool, or null for none.
+  validation: z.enum(VALIDATION_NAMES).nullable(),
+  // Add the most similar successful dev trajectories to the prompt.
+  exemplars: z.boolean(),
+  embedding: embeddingSchema,
+  gate: z.strictObject({
+    // A candidate fails if any category's success rate drops by more than
+    // this many points, on dev or holdout.
+    maxCategoryDropPoints: z.number().nonnegative(),
+  }),
   judge: judgeSchema,
 });
 export type Config = z.infer<typeof configSchema>;

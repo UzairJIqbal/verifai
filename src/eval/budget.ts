@@ -10,6 +10,29 @@ export function dailyUnits(usage: CallUsage, daily: FreeTierLimits["daily"]): nu
   return (fresh * w.input + usage.cachedInputTokens * w.cachedInput + usage.outputTokens * w.output) / 1_000_000;
 }
 
+// Where today's count starts, for a provider whose day resets as `daily` says.
+export function dayStart(daily: FreeTierLimits["daily"], nowMs: number): number {
+  if (daily.resets === "rolling 24 hours") return nowMs - 24 * 60 * 60 * 1000;
+  const d = new Date(nowMs);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+// Calls sent but not yet recorded, counting the one about to go.
+export type PendingCalls = { calls: number; inputTokens: number };
+
+/**
+ * Why the pending calls mustn't all be sent, or null if they may be. Each is
+ * counted with its guessed input and an average reply. Our own count is the
+ * limit, not the provider's refusal: Cloudflare kept answering at 2.6 times its
+ * free allowance and never said it was used up.
+ */
+export function dailyLimitReached(usedToday: ProviderUsage, pending: PendingCalls, outputPerCall: number, daily: FreeTierLimits["daily"]): string | null {
+  const used = dailyUnits(usedToday, daily);
+  const next = dailyUnits({ inputTokens: pending.inputTokens, cachedInputTokens: 0, outputTokens: pending.calls * outputPerCall }, daily);
+  if (used + next <= daily.allowance) return null;
+  return `${Math.round(used).toLocaleString("en-US")} of its ${daily.allowance.toLocaleString("en-US")} ${daily.unit} today are used by our count`;
+}
+
 export type ProviderBudgetInput = { provider: string; limits: FreeTierLimits; usedToday: ProviderUsage };
 
 export type BudgetInput = {

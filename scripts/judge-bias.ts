@@ -22,7 +22,7 @@ import { callsToSend, runJudgeCalls, type CallsProgress, type JudgeJob } from ".
 import { orderSwappedRequest, paddedSteps, paddingEligible, tallyBias, type BiasPair } from "../src/labels/bias";
 import { appendBiasResult, readLabels } from "../src/labels/files";
 import { BIAS_CHECKS, type BiasCheck } from "../src/labels/schema";
-import { readRun, type RunFiles } from "../src/results/read";
+import { devTrials, readRun, type RunFiles } from "../src/results/read";
 import type { JudgeCheck } from "../src/results/schema";
 import { getShopToday, openFreshShop } from "../src/shop/db";
 
@@ -62,7 +62,7 @@ async function main(): Promise<void> {
     for (const l of chosen) {
       if (!runs.has(l.runId)) runs.set(l.runId, readRun(l.runId));
       const run = runs.get(l.runId);
-      const trial = run?.split === "dev" ? run.trials.find((t) => t.taskId === l.taskId && t.tryNumber === l.tryNumber) : undefined;
+      const trial = devTrials(run ?? null)?.find((t) => t.taskId === l.taskId && t.tryNumber === l.tryNumber);
       const before = trial?.judge;
       if (!trial || before?.status !== "judged" || before.rubricVersion !== rubric.version || before.model !== judge.model) {
         notJudged++;

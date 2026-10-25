@@ -50,7 +50,7 @@ function Trajectory({ runId, taskId, tryNumber }: Params) {
     </p>
   );
 
-  if (files.split === "holdout") {
+  if (files.sealed) {
     return (
       <>
         {back}

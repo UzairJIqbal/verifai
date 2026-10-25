@@ -1,8 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { PROJECT_ROOT, type Config } from "../config";
-import { TOOL_NAMES, type ToolName } from "./tools";
+import { PROJECT_ROOT } from "../config";
+import { TOOL_NAMES, type PreCheck, type ToolName } from "./tools";
+import { VALIDATIONS, type ValidationName } from "./validation";
 
 const AGENT_DIR = join(PROJECT_ROOT, "agent");
 
@@ -18,9 +19,34 @@ export type ToolDescriptions = Partial<Record<ToolName, string>>;
 // the same list and the cache key doesn't change with the file's order.
 export const offeredTools = (descriptions: ToolDescriptions): ToolName[] => TOOL_NAMES.filter((name) => descriptions[name] !== undefined);
 
+// What an agent version is made of: the four things a candidate may change.
+// The config holds the promoted version's; a candidate changes one.
+export type AgentKnobs = {
+  promptVersion: string;
+  toolDescriptionsVersion: string;
+  validation: ValidationName | null;
+  exemplars: boolean;
+};
+
+export const knobsOf = (k: AgentKnobs): AgentKnobs => ({
+  promptVersion: k.promptVersion,
+  toolDescriptionsVersion: k.toolDescriptionsVersion,
+  validation: k.validation,
+  exemplars: k.exemplars,
+});
+
+// e.g. "prompt v1 · tools v1 · validation refund-limit · exemplars".
+export function knobsLabel(k: AgentKnobs): string {
+  return [`prompt ${k.promptVersion}`, `tools ${k.toolDescriptionsVersion}`, ...(k.validation ? [`validation ${k.validation}`] : []), ...(k.exemplars ? ["exemplars"] : [])].join(" · ");
+}
+
 export type AgentVersion = {
   promptVersion: string;
   toolDescriptionsVersion: string;
+  validation: ValidationName | null;
+  // Whether similar successful dev trajectories are added to the prompt. The
+  // runner adds them per task; `systemPrompt` here is without them.
+  exemplars: boolean;
   // What the agent reports as its version, e.g. "prompt v1 · tools v1".
   label: string;
   systemPrompt: string;
@@ -41,24 +67,31 @@ function readAgentFile(...parts: string[]): string {
 
 export const loadPolicy = (): string => readAgentFile("policy.md").trim();
 
-export function loadAgentVersion(config: Config, today: string): AgentVersion {
-  const template = readAgentFile("prompts", `${config.promptVersion}.md`);
+export function loadAgentVersion(knobs: AgentKnobs, today: string): AgentVersion {
+  const template = readAgentFile("prompts", `${knobs.promptVersion}.md`);
   const policy = loadPolicy();
   for (const placeholder of ["{{today}}", "{{policy}}"]) {
     if (!template.includes(placeholder)) {
-      throw new Error(`agent/prompts/${config.promptVersion}.md is missing the ${placeholder} placeholder.`);
+      throw new Error(`agent/prompts/${knobs.promptVersion}.md is missing the ${placeholder} placeholder.`);
     }
   }
   const systemPrompt = template.replaceAll("{{today}}", today).replaceAll("{{policy}}", policy);
 
   return {
-    promptVersion: config.promptVersion,
-    toolDescriptionsVersion: config.toolDescriptionsVersion,
-    label: `prompt ${config.promptVersion} · tools ${config.toolDescriptionsVersion}`,
+    promptVersion: knobs.promptVersion,
+    toolDescriptionsVersion: knobs.toolDescriptionsVersion,
+    validation: knobs.validation,
+    exemplars: knobs.exemplars,
+    label: knobsLabel(knobs),
     systemPrompt,
     policy,
-    toolDescriptions: loadToolDescriptions(config.toolDescriptionsVersion),
+    toolDescriptions: loadToolDescriptions(knobs.toolDescriptionsVersion),
   };
+}
+
+// The version's validation step, in the form the tool runner takes.
+export function preCheckOf(version: Pick<AgentVersion, "validation">): PreCheck | null {
+  return version.validation === null ? null : VALIDATIONS[version.validation];
 }
 
 export function loadToolDescriptions(version: string): ToolDescriptions {

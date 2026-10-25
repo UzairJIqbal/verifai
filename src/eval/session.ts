@@ -1,19 +1,22 @@
-// One run of the dev split from the terminal, shared by `pnpm eval` and
-// `pnpm noise`: load everything, print the budget, run the tries, write the
-// results and print the report. Stops cleanly at the daily limit or Ctrl-C;
+// One run from the terminal, shared by `pnpm eval`, `pnpm noise` and `pnpm
+// gate`: load everything, print the budget, run the tries, write the results
+// and print the report. Dev unless the gate hands it holdout tasks. Stops cleanly at the daily limit or Ctrl-C;
 // the same configuration carries the same unfinished run on next time.
 import { relative } from "node:path";
+import { createInterface } from "node:readline/promises";
 import { styleText } from "node:util";
 import { loadConfig, PROJECT_ROOT, type Config } from "../config";
 import { getShopToday, openFreshShop } from "../shop/db";
-import { loadAgentVersion, type AgentVersion } from "../agent/versions";
+import { knobsOf, loadAgentVersion, type AgentKnobs, type AgentVersion } from "../agent/versions";
+import { cachedEmbedding, connectEmbedder, embedTexts, embeddingSecrets, uncachedTexts, type SendEmbeddings } from "../embedding/embed";
+import { checkExemplarsFit, exemplarBlock, exemplarStoreHash, pickExemplars, readExemplars, type Exemplar } from "../exemplars/store";
 import { connectAgent, describeModelError, type AgentConnection } from "../agent/model";
 import { loadTasks, type LoadedTasks } from "../tasks/load";
-import type { Task } from "../tasks/schema";
+import type { Split, Task } from "../tasks/schema";
 import { readShopFacts } from "../graders/shop-facts";
 import type { ShopFacts } from "../graders/steps";
 import { cacheKey } from "./cache";
-import { estimateBudget, type Budget } from "./budget";
+import { dailyLimitReached, dayStart, estimateBudget, type Budget } from "./budget";
 import { Pacer, estimateTokens, type Clock } from "./pacer";
 import { buildRunConfig, configKey, firstRequest, newRunId, runFingerprint } from "./plan";
 import { pickSmokeTasks } from "./smoke";
@@ -34,6 +37,24 @@ export const compact = (value: number) =>
 export function fatal(message: string): never {
   console.error(styleText("red", `✗ ${message}`));
   process.exit(1);
+}
+
+// Yes only for a typed y or yes. Ctrl+D or the input ending is a no,
+// never a crash: in a terminal readline rejects the question, and on a plain
+// stream it just closes without settling it. Either way someone backed out.
+export async function ask(question: string, io: { input: NodeJS.ReadableStream; output: NodeJS.WritableStream } = { input: process.stdin, output: process.stdout }): Promise<boolean> {
+  const rl = createInterface({ input: io.input, output: io.output });
+  const backedOut = new Promise<false>((resolve) => rl.once("close", () => resolve(false)));
+  try {
+    const answer = await Promise.race([rl.question(question), backedOut]);
+    if (answer === false) io.output.write("\n");
+    return answer !== false && /^y(es)?$/i.test(answer.trim());
+  } catch {
+    io.output.write("\n");
+    return false;
+  } finally {
+    rl.close();
+  }
 }
 
 // One line that rewrites itself in a terminal; anything else gets a line per
@@ -95,14 +116,28 @@ export function makeClock(): Clock & { wakeAll: () => void } {
   };
 }
 
+// Which agent on which tasks. Without one: the promoted version from the
+// config on the dev split. Holdout tasks come only from the gate, which is
+// the one caller allowed to load them; it passes the dev ids too, since
+// exemplars may only ever come from dev.
+export type SessionPlan =
+  | { split: "dev"; knobs: AgentKnobs; loaded: LoadedTasks }
+  | { split: "holdout"; knobs: AgentKnobs; loaded: LoadedTasks; devTaskIds: Set<string> };
+
+// Exemplar memory for a version that uses it. Each task's pick needs an
+// embedding of its first message; `send` gets the ones not cached.
+type SessionExemplars = { entries: Exemplar[]; send: SendEmbeddings; byTask: Map<string, AgentVersion> | null };
+
 export type Session = {
   config: Config;
   loaded: LoadedTasks;
+  split: Split;
   tasks: Task[];
-  // Every dev task by id, for the results files.
+  // Every task of the split by id, for the results files.
   tasksById: Map<string, Task>;
   shop: ShopFacts;
   version: AgentVersion;
+  exemplars: SessionExemplars | null;
   agents: AgentConnection[];
   labels: Map<string, string>;
   pacers: Map<string, Pacer>;
@@ -116,44 +151,70 @@ export type Session = {
   close: () => Promise<void>;
 };
 
-export async function openSession(args: { useCache: boolean; smoke: boolean }): Promise<Session> {
+export async function openSession(args: { useCache: boolean; smoke: boolean; plan?: SessionPlan }): Promise<Session> {
   const { useCache, smoke } = args;
   let config: Config;
-  let loaded: LoadedTasks;
+  let plan: SessionPlan;
   let tasks: Task[];
   let version: AgentVersion;
   let agents: AgentConnection[];
   let shopFacts: ShopFacts;
+  let exemplars: SessionExemplars | null = null;
+  let secrets: (string | undefined)[] = [];
   // One per provider, each with its own per-minute budget. Filled when a run
   // starts, once the store can say what each provider still counts from the
   // last minute.
   const pacers = new Map<string, Pacer>();
   try {
     config = loadConfig();
-    loaded = loadTasks();
-    tasks = smoke ? pickSmokeTasks(loaded.tasks, config.runner.smokeTasks) : loaded.tasks;
+    plan = args.plan ?? { split: "dev", knobs: knobsOf(config), loaded: loadTasks() };
+    if (plan.split === "holdout" && smoke) throw new Error("A smoke run is dev only.");
+    tasks = smoke ? pickSmokeTasks(plan.loaded.tasks, config.runner.smokeTasks) : plan.loaded.tasks;
     const shop = openFreshShop();
     const today = getShopToday(shop.db);
     shopFacts = readShopFacts(shop.db, today);
     shop.dispose();
-    version = loadAgentVersion(config, today);
+    version = loadAgentVersion(plan.knobs, today);
     agents = config.agent.pool.map((member) => connectAgent(member, (remaining) => pacers.get(member.provider)?.observeRemaining(remaining)));
+    if (version.exemplars) {
+      const devIds = plan.split === "dev" ? new Set(plan.loaded.tasks.map((t) => t.id)) : plan.devTaskIds;
+      const entries = readExemplars(devIds);
+      if (entries.length === 0) throw new Error("This version uses exemplars, but evals/exemplars.jsonl has none. Add some with `pnpm exemplars:add <dev run>`.");
+      checkExemplarsFit(entries, config.embedding);
+      const embedder = connectEmbedder(config.embedding);
+      exemplars = { entries, send: embedder.send, byTask: null };
+      secrets = embedder.secrets;
+    }
   } catch (error) {
     fatal(error instanceof Error ? error.message : String(error));
   }
-  if (tasks.length === 0) fatal("There are no dev tasks in evals/tasks.jsonl.");
+  const { loaded } = plan;
+  if (tasks.length === 0) fatal(`There are no ${plan.split} tasks in evals/tasks.jsonl.`);
 
-  const redact = makeRedactor([...agents.flatMap((a) => a.secrets), ...langfuseSecrets()]);
+  const redact = makeRedactor([...agents.flatMap((a) => a.secrets), ...langfuseSecrets(), ...secrets, ...embeddingSecrets(config.embedding)]);
   const store = new EvalStore(EVAL_STORE_PATH, redact);
-  const runConfig = buildRunConfig({ config, version, datasetVersion: loaded.version, split: "dev", tasks, useCache, smoke });
-  const tracing = await startTracing(redact);
+  const runConfig = buildRunConfig({
+    config,
+    version,
+    datasetVersion: loaded.version,
+    split: plan.split,
+    tasks,
+    useCache,
+    smoke,
+    exemplars: exemplars ? { storeHash: exemplarStoreHash(exemplars.entries), entries: exemplars.entries.length } : null,
+  });
+  // A trace shows the whole trajectory, so a holdout try is never traced:
+  // nothing of it may be readable before its version is promoted.
+  const tracing: Tracing = plan.split === "holdout" ? { on: false, reason: "holdout tries are never traced, so none can be read before promotion" } : await startTracing(redact);
   return {
     config,
     loaded,
+    split: plan.split,
     tasks,
     tasksById: new Map(loaded.tasks.map((t) => [t.id, t])),
     shop: shopFacts,
     version,
+    exemplars,
     agents,
     labels: new Map(agents.map((a) => [a.provider, a.label])),
     pacers,
@@ -171,32 +232,84 @@ export async function openSession(args: { useCache: boolean; smoke: boolean }): 
   };
 }
 
-// The tries a run still has to do, and how many of those the cache answers.
-export function remainingTries(s: Session, runId: string | null): { left: number; cached: number } {
-  const finished = runId === null ? new Set<string>() : s.store.finishedTries(runId);
-  const remaining = s.tasks.flatMap((task) =>
-    Array.from({ length: s.runConfig.triesPerTask }, (_, i) => ({ task, tryNumber: i + 1 })).filter((t) => !finished.has(tryKey(t.task.id, t.tryNumber))),
+/**
+ * The tries a run still has, and how many of them the cache already holds,
+ * so the estimate counts only the calls that will really be sent. A try is
+ * cached when its first model call is: with the same prompt, tools and
+ * conversation at temperature 0, every call after it replays too. `keyFor`
+ * gives null when a try's request can't be known yet (exemplars waiting on
+ * an embedding); that try counts as not cached.
+ */
+export function countRemaining(args: {
+  tasks: Task[];
+  triesPerTask: number;
+  finished: Set<string>;
+  keyFor: (task: Task, tryNumber: number) => string | null;
+  isCached: (key: string) => boolean;
+}): { left: number; cached: number } {
+  const remaining = args.tasks.flatMap((task) =>
+    Array.from({ length: args.triesPerTask }, (_, i) => ({ task, tryNumber: i + 1 })).filter((t) => !args.finished.has(tryKey(t.task.id, t.tryNumber))),
   );
-  const { config, version } = s;
-  const cached = s.useCache
-    ? remaining.filter(({ task, tryNumber }) => {
-        const key = cacheKey({ model: config.agent.model, temperature: config.agent.temperature, reasoningEffort: config.agent.reasoningEffort, request: firstRequest(version, task), tryNumber });
-        return s.store.cacheGet(key) !== null;
-      }).length
-    : 0;
+  const cached = remaining.filter(({ task, tryNumber }) => {
+    const key = args.keyFor(task, tryNumber);
+    return key !== null && args.isCached(key);
+  }).length;
   return { left: remaining.length, cached };
+}
+
+export function remainingTries(s: Session, runId: string | null): { left: number; cached: number } {
+  const { config } = s;
+  return countRemaining({
+    tasks: s.tasks,
+    triesPerTask: s.runConfig.triesPerTask,
+    finished: runId === null ? new Set<string>() : s.store.finishedTries(runId),
+    keyFor: (task, tryNumber) => {
+      const version = knownVersionFor(s, task);
+      return version === null
+        ? null
+        : cacheKey({ model: config.agent.model, temperature: config.agent.temperature, reasoningEffort: config.agent.reasoningEffort, request: firstRequest(version, task), tryNumber });
+    },
+    // With the cache off nothing replays, so every try is sent.
+    isCached: (key) => s.useCache && s.store.cacheGet(key) !== null,
+  });
+}
+
+const withExemplars = (s: Session, task: Task, query: number[], entries: Exemplar[]): AgentVersion => ({
+  ...s.version,
+  systemPrompt: s.version.systemPrompt + exemplarBlock(pickExemplars(task, query, entries)),
+});
+
+// The version a task gets, if it can be known without a call: with exemplars,
+// only once its first message's embedding is cached.
+function knownVersionFor(s: Session, task: Task): AgentVersion | null {
+  if (s.exemplars === null) return s.version;
+  const ready = s.exemplars.byTask?.get(task.id);
+  if (ready) return ready;
+  const query = cachedEmbedding(s.store, s.config.embedding, task.first_message);
+  return query === null ? null : withExemplars(s, task, query, s.exemplars.entries);
+}
+
+// How many first messages still need embedding before the run: the one
+// embedding call it makes, if any.
+export const embeddingsToSend = (s: Session): number => (s.exemplars === null ? 0 : uncachedTexts(s.store, s.config.embedding, s.tasks.map((t) => t.first_message)).length);
+
+// Picks every task's exemplars, sending the embeddings the cache lacks.
+async function prepareExemplars(s: Session): Promise<void> {
+  if (s.exemplars === null || s.exemplars.byTask !== null) return;
+  const { entries, send } = s.exemplars;
+  const vectors = await embedTexts(s.store, s.config.embedding, s.tasks.map((t) => t.first_message), send);
+  s.exemplars.byTask = new Map(s.tasks.map((t, i) => [t.id, withExemplars(s, t, vectors[i], entries)]));
 }
 
 export function budgetFor(s: Session, triesLeft: number, cachedTries: number): Budget {
   // Until there's history, a first request's size and a guess at the reply.
   const guessed = estimateTokens(firstRequest(s.version, s.tasks[0])) * 1.5;
-  const dayAgo = Date.now() - 24 * 60 * 60 * 1000;
   return estimateBudget({
     triesLeft,
     cachedTries,
     callsPerTry: s.store.averageCallsPerTry() ?? 4,
     usagePerCall: s.store.averageUsagePerCall(s.config.agent.pool.map((m) => m.provider)) ?? { inputTokens: guessed, cachedInputTokens: 0, outputTokens: 0 },
-    providers: s.config.agent.pool.map((m) => ({ provider: m.provider, limits: m.freeTierLimits, usedToday: s.store.usageSince(m.provider, dayAgo) })),
+    providers: s.config.agent.pool.map((m) => ({ provider: m.provider, limits: m.freeTierLimits, usedToday: s.store.usageSince(m.provider, dayStart(m.freeTierLimits.daily, Date.now())) })),
   });
 }
 
@@ -266,6 +379,13 @@ export function printJudgeReport(report: Report): void {
   printTable(header, rows);
 }
 
+const versionLookup = (byTask: Map<string, AgentVersion>) => (task: Task): AgentVersion => {
+  const version = byTask.get(task.id);
+  // Every task was given its exemplars before the run; one without is a bug.
+  if (!version) throw new Error(`No exemplars were picked for ${task.id}.`);
+  return version;
+};
+
 export type RunOutcome = { run: StoredRun; finished: true; report: Report; dir: string } | { run: StoredRun; finished: false };
 
 // Runs (or carries on) the run with the session's configuration. It never
@@ -290,11 +410,18 @@ export async function executeRun(s: Session, args: { title: string; command: str
 
   const holdout = Object.values(s.loaded.holdoutCounts).reduce((a, b) => a + b, 0);
   console.log(
-    styleText("bold", `VerifAI ${args.title} · run ${run.id} · dataset ${s.loaded.version} · ${s.tasks.length} dev tasks × ${runConfig.triesPerTask} tries = ${total}`),
+    styleText("bold", `VerifAI ${args.title} · run ${run.id} · dataset ${s.loaded.version} · ${s.tasks.length} ${s.split} tasks × ${runConfig.triesPerTask} tries = ${total}`),
   );
   console.log(dim(`  agent ${s.version.label} · ${config.agent.model} from ${s.agents.map((a) => a.label).join(", then ")} · temperature ${config.agent.temperature}`));
   if (smoke) console.log(dim(`  smoke: ${s.tasks.map((t) => t.id).join(", ")} · checks the machinery, never a score, comparison or gate`));
-  console.log(dim(`  ${existing ? `carrying on: ${total - left} of ${total} tries already done` : "new run"} · cache ${useCache ? "on" : "off (--no-cache)"} · ${holdout} holdout tasks not loaded`));
+  console.log(
+    dim(
+      `  ${existing ? `carrying on: ${total - left} of ${total} tries already done` : "new run"} · cache ${useCache ? "on" : "off (--no-cache)"} · ${
+        s.split === "dev" ? `${holdout} holdout tasks not loaded` : "holdout: tries stay sealed (outcomes only) unless this version is promoted"
+      }`,
+    ),
+  );
+  if (s.exemplars) console.log(dim(`  exemplars: the ${s.exemplars.entries.length > 1 ? "2 most similar" : "1"} of ${s.exemplars.entries.length} dev conversations added to each prompt`));
   const others = store.unfinishedRuns().filter((r) => r.id !== run.id);
   if (!existing && others.length > 0) {
     console.log(dim(`  ${others.length} unfinished run(s) had a different configuration, so this is a new run.`));
@@ -313,9 +440,19 @@ export async function executeRun(s: Session, args: { title: string; command: str
   }
   console.log(`  Judge (${config.judge.model}): 0 calls here · the claim checker runs on its own, with \`pnpm claims\`\n`);
 
+  try {
+    await prepareExemplars(s);
+  } catch (error) {
+    await s.close();
+    fatal(`Couldn't pick exemplars: ${error instanceof Error ? error.message : String(error)}. Nothing was run.`);
+  }
+
   const clock = makeClock();
   // Each starts from what its provider still counts from calls in the last minute.
   for (const m of config.agent.pool) s.pacers.set(m.provider, new Pacer(m.freeTierLimits, clock, store.recentCalls(m.provider, Date.now() - 60_000)));
+  // An average reply, held back for each call before it goes. None until
+  // there's history: the first 20 calls are counted by their input alone.
+  const outputPerCall = store.averageUsagePerCall(config.agent.pool.map((m) => m.provider))?.outputTokens ?? 0;
   const pool: PoolProvider[] = s.agents.map((a, i) => {
     const member = config.agent.pool[i];
     const pacer = s.pacers.get(a.provider);
@@ -327,6 +464,10 @@ export async function executeRun(s: Session, args: { title: string; command: str
       pacer,
       describeError: (error) => describeModelError(error, member, config.agent.stepTimeoutSeconds),
       dailyAfterLimitErrors: a.dailyAfterLimitErrors,
+      dailyLimitReached: (pending) => {
+        const { daily } = member.freeTierLimits;
+        return dailyLimitReached(store.usageSince(a.provider, dayStart(daily, Date.now())), pending, outputPerCall, daily);
+      },
     };
   });
   const progressLine = makeProgressLine(labels);
@@ -357,6 +498,7 @@ export async function executeRun(s: Session, args: { title: string; command: str
         reasoningEffort: config.agent.reasoningEffort,
         version: s.version,
       },
+      ...(s.exemplars?.byTask ? { versionFor: versionLookup(s.exemplars.byTask) } : {}),
       tasks: s.tasks,
       shop: s.shop,
       concurrency: config.runner.concurrency,

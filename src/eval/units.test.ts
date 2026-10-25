@@ -1,16 +1,18 @@
+import { PassThrough } from "node:stream";
 import { APICallError } from "ai";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../config";
 import { loadAgentVersion } from "../agent/versions";
 import { taskSchema } from "../tasks/schema";
-import { estimateBudget } from "./budget";
+import { dailyLimitReached, dayStart, estimateBudget } from "./budget";
 import { cacheKey, decodeCachedCall, encodeCachedCall } from "./cache";
 import { Pacer, type Clock } from "./pacer";
 import { buildRunConfig, firstRequest, newRunId, runFingerprint } from "./plan";
 import { busyWaitMs, classifyFailure } from "./provider-errors";
 import { makeRedactor, REDACTED } from "./redact";
 import { costUsd } from "./runner";
-import { EvalStore } from "./store";
+import { ask, countRemaining } from "./session";
+import { EvalStore, tryKey } from "./store";
 
 const config = loadConfig();
 const version = loadAgentVersion(config, "2026-03-15");
@@ -229,6 +231,51 @@ describe("budget", () => {
     const used = [{ ...providers[0], usedToday: { calls: 50, inputTokens: 150_000, cachedInputTokens: 0, outputTokens: 50_000 } }];
     expect(estimateBudget({ triesLeft: 1, cachedTries: 0, callsPerTry: 4, usagePerCall, providers: used }).providers[0].callsLeftToday).toBe(0);
   });
+
+  it("starts Cloudflare's day at 00:00 UTC and Groq's 24 hours back", () => {
+    const [groq, cloudflare] = config.agent.pool.map((m) => m.freeTierLimits.daily);
+    const now = Date.UTC(2026, 9, 20, 20, 34);
+    expect(dayStart(cloudflare, now)).toBe(Date.UTC(2026, 9, 20));
+    expect(dayStart(groq, now)).toBe(Date.UTC(2026, 9, 19, 20, 34));
+  });
+
+  it("stops a provider by our count before a call would go past its allowance", () => {
+    const cloudflare = config.agent.pool[1].freeTierLimits.daily;
+    // 300,000 input tokens is 9,545 neurons, leaving 455; 10,000 input tokens is 318.
+    const used = { calls: 300, inputTokens: 300_000, cachedInputTokens: 0, outputTokens: 0 };
+    const why = "9,545 of its 10,000 neurons today are used by our count";
+    expect(dailyLimitReached(used, { calls: 1, inputTokens: 10_000 }, 0, cloudflare)).toBeNull();
+    expect(dailyLimitReached(used, { calls: 1, inputTokens: 20_000 }, 0, cloudflare)).toBe(why);
+    // The reply counts too: 2,500 output tokens is another 170.
+    expect(dailyLimitReached(used, { calls: 1, inputTokens: 10_000 }, 2_500, cloudflare)).toBe(why);
+    // And so does a call already in flight.
+    expect(dailyLimitReached(used, { calls: 2, inputTokens: 20_000 }, 0, cloudflare)).toBe(why);
+  });
+
+  // What the gate shows: tries the cache already holds cost nothing.
+  const tasks = [task, { ...task, id: "status-02" }];
+  const count = (cachedKeys: Set<string>, finished = new Set<string>(), keyFor = (t: typeof task, n: number): string | null => tryKey(t.id, n)) =>
+    countRemaining({ tasks, triesPerTask: 2, finished, keyFor, isCached: (key) => cachedKeys.has(key) });
+  const callsFor = (r: { left: number; cached: number }) =>
+    estimateBudget({ triesLeft: r.left, cachedTries: r.cached, callsPerTry: 4, usagePerCall, providers }).calls;
+
+  it("estimates 0 calls for a fully cached run", () => {
+    const all = new Set(tasks.flatMap((t) => [tryKey(t.id, 1), tryKey(t.id, 2)]));
+    const r = count(all);
+    expect(r).toEqual({ left: 4, cached: 4 });
+    expect(callsFor(r)).toBe(0);
+  });
+
+  it("estimates only the missing tries of a half-cached run", () => {
+    const r = count(new Set([tryKey("status-01", 1), tryKey("status-02", 1)]));
+    expect(r).toEqual({ left: 4, cached: 2 });
+    expect(callsFor(r)).toBe(8);
+  });
+
+  it("skips finished tries and counts an unknown request as not cached", () => {
+    expect(count(new Set(), new Set([tryKey("status-01", 1)]))).toEqual({ left: 3, cached: 0 });
+    expect(count(new Set([tryKey("status-01", 1)]), new Set(), () => null)).toEqual({ left: 4, cached: 0 });
+  });
 });
 
 describe("cost", () => {
@@ -236,5 +283,33 @@ describe("cost", () => {
     expect(costUsd({ inputTokens: 1_000_000, cachedInputTokens: 500_000, outputTokens: 1_000_000 }, { input: 0.15, cachedInput: 0.075, output: 0.6 })).toBeCloseTo(
       0.075 + 0.0375 + 0.6,
     );
+  });
+});
+
+describe("asking before spending", () => {
+  // In a terminal, as the gate runs, Ctrl+D is a keypress; elsewhere the input ends.
+  const answer = (typed: string | null, terminal = false) => {
+    const input = new PassThrough();
+    const output = Object.assign(new PassThrough(), { isTTY: terminal });
+    const reply = ask("Start? [y/N] ", { input, output });
+    // null is Ctrl+D: the input ends with nothing typed.
+    if (typed === null) {
+      if (terminal) input.write("\u0004");
+      else input.end();
+    }
+    else input.write(typed);
+    return reply;
+  };
+
+  it("is yes only for y or yes", async () => {
+    expect(await answer("y\n")).toBe(true);
+    expect(await answer("YES\n")).toBe(true);
+    expect(await answer("\n")).toBe(false);
+    expect(await answer("yep\n")).toBe(false);
+  });
+
+  it("takes Ctrl+D as no instead of crashing", async () => {
+    expect(await answer(null, true)).toBe(false);
+    expect(await answer(null)).toBe(false);
   });
 });

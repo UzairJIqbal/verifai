@@ -1,0 +1,9 @@
+[
+  {
+    "agentVersion": "v1",
+    "promptVersion": "v1",
+    "toolDescriptionsVersion": "v1",
+    "validation": null,
+    "exemplars": false
+  }
+]

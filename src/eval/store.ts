@@ -31,6 +31,12 @@ export const runConfigSchema = z.object({
   }),
   promptVersion: z.string(),
   toolDescriptionsVersion: z.string(),
+  // Only present when on, so a run without them keeps the configuration key
+  // it had before they existed.
+  validation: z.string().optional(),
+  // The exemplar store as it was: which trajectories could be shown, and the
+  // embedding model that picked them.
+  exemplars: z.object({ storeHash: z.string(), entries: z.number().int(), embeddingModel: z.string(), dimensions: z.number().int() }).optional(),
   datasetVersion: z.string(),
   split: z.enum(SPLITS),
   // A smoke run checks the machinery on a few tasks. It's never a score,
