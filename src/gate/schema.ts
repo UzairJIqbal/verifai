@@ -15,6 +15,10 @@ export const gateRowSchema = z.object({
   p: z.number(),
   floor: z.number().nullable(),
   verdict: z.enum(["better", "worse", "within-noise", "no-noise-floor"]),
+  // How far a category row could drop before the gate failed it (D-002).
+  // Absent on overall rows, and on records from before D-002, when every
+  // category's limit was maxCategoryDropPoints.
+  dropLimit: z.number().optional(),
 });
 export type GateRow = z.infer<typeof gateRowSchema>;
 

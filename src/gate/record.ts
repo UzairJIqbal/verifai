@@ -26,11 +26,13 @@ export const gateRow = (r: ComparisonRow): GateRow => ({
   verdict: r.verdict,
 });
 
-export function gateComparison(c: Comparison): GateRecord["dev"] {
+// Each category row carries the drop limit the gate held it to, as the
+// decision worked it out (`GateDecision.dropLimits`).
+export function gateComparison(c: Comparison, dropLimits: Partial<Record<Category, number>>): GateRecord["dev"] {
   const byCategory: Partial<Record<Category, GateRow>> = {};
   for (const cat of CATEGORIES) {
     const row = c.byCategory[cat];
-    if (row !== undefined) byCategory[cat] = gateRow(row);
+    if (row !== undefined) byCategory[cat] = { ...gateRow(row), dropLimit: dropLimits[cat] };
   }
   return { overall: gateRow(c.overall), byCategory };
 }
@@ -121,10 +123,11 @@ function metricLine(label: string, r: GateRow, tasks: number, tries: number): st
 // The entry a promotion adds to CHANGELOG.md.
 export function changelogEntry(record: GateRecord, gateFile: string): string {
   const day = record.decidedAt.slice(0, 10);
+  // Records from before D-002 held every category to the flat minimum.
   const cats = (c: GateRecord["dev"]) =>
     CATEGORIES.flatMap((cat) => {
       const r = c.byCategory[cat];
-      return r ? [`${cat} ${signed(r.difference.value)}`] : [];
+      return r ? [`${cat} ${signed(r.difference.value)} (limit ${(r.dropLimit ?? record.maxCategoryDropPoints).toFixed(1)})`] : [];
     }).join(", ");
   return [
     `## ${record.name} · ${day}`,
@@ -135,7 +138,7 @@ export function changelogEntry(record: GateRecord, gateFile: string): string {
     `- Dataset: ${record.datasetVersion}.`,
     metricLine("Holdout success", record.holdout.overall, record.holdout.overall.tasks, record.triesPerTask),
     metricLine("Dev success", record.dev.overall, record.dev.overall.tasks, record.triesPerTask),
-    `- By category, points: holdout ${cats(record.holdout)}; dev ${cats(record.dev)}. None dropped more than ${record.maxCategoryDropPoints}.`,
+    `- By category, points: holdout ${cats(record.holdout)}; dev ${cats(record.dev)}. None dropped more than its limit: the larger of ${record.maxCategoryDropPoints} points and the promoted version's noise floor for that category, rescaled to its task count (on holdout, estimated from dev).`,
     `- Noise floor from configuration ${record.floor.configKey} (dataset ${record.floor.datasetVersion}, ${record.floor.tasks} tasks, measured ${record.floor.measuredAt.slice(0, 10)}), rescaled to each slice's task count; the holdout floor is estimated from dev, since holdout is never run twice to measure its own.`,
     `- Runs: dev ${record.runs.promotedDev} → ${record.runs.candidateDev}; holdout ${record.runs.promotedHoldout} → ${record.runs.candidateHoldout}. Gate record: ${gateFile}.`,
     "",

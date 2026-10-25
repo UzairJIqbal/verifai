@@ -17,7 +17,7 @@ const VERDICT: Record<GateRow["verdict"], { text: string; tone: string }> = {
   "no-noise-floor": { text: "no floor", tone: "text-muted-foreground" },
 };
 
-function Rows({ split, c, tries }: { split: string; c: GateRecord["dev"]; tries: number }) {
+function Rows({ split, c, tries, minDrop }: { split: string; c: GateRecord["dev"]; tries: number; minDrop: number }) {
   const rows: [string, GateRow][] = [["all", c.overall], ...CATEGORIES.flatMap((cat): [string, GateRow][] => (c.byCategory[cat] ? [[cat, c.byCategory[cat]]] : []))];
   return rows.map(([label, r], i) => (
     <tr key={`${split}-${label}`} className={i === 0 ? "font-medium" : undefined}>
@@ -37,6 +37,8 @@ function Rows({ split, c, tries }: { split: string; c: GateRecord["dev"]; tries:
         {r.floor === null ? "–" : (r.floor * 100).toFixed(1)}
         {r.floor !== null && split === "holdout" && " (estimated from dev)"}
       </td>
+      {/* Records from before D-002 held every category to the flat minimum. */}
+      <td className={`${num} text-muted-foreground`}>{i === 0 ? "–" : (r.dropLimit ?? minDrop).toFixed(1)}</td>
       <td className={`${cell} ${VERDICT[r.verdict].tone}`}>{VERDICT[r.verdict].text}</td>
     </tr>
   ));
@@ -78,12 +80,15 @@ function Gate({ g }: { g: GateRecord }) {
               <th className={`${cell} text-right font-normal`}>95% interval</th>
               <th className={`${cell} text-right font-normal`}>McNemar p</th>
               <th className={`${cell} text-right font-normal`}>Floor</th>
+              <th className={`${cell} text-right font-normal`} title="How far this category could drop before the gate failed it">
+                Drop limit
+              </th>
               <th className={`${cell} font-normal`}>Verdict</th>
             </tr>
           </thead>
           <tbody className="divide-y">
-            <Rows split="holdout" c={g.holdout} tries={g.triesPerTask} />
-            <Rows split="dev" c={g.dev} tries={g.triesPerTask} />
+            <Rows split="holdout" c={g.holdout} tries={g.triesPerTask} minDrop={g.maxCategoryDropPoints} />
+            <Rows split="dev" c={g.dev} tries={g.triesPerTask} minDrop={g.maxCategoryDropPoints} />
           </tbody>
         </table>
       </div>
@@ -109,7 +114,7 @@ export default function GatesPage() {
   const heading = (
     <PageHeading title="Gates">
       Each candidate against the promoted version on dev and holdout. A candidate passes only if holdout success beats the noise floor with McNemar agreeing, and no category
-      drops more than the set limit on either split. McNemar p is the chance of a split of task outcomes this uneven if nothing had really changed.
+      drops more than its limit on either split: the larger of the set minimum and the promoted version&apos;s noise floor for that category. McNemar p is the chance of a split of task outcomes this uneven if nothing had really changed.
     </PageHeading>
   );
   let listing;

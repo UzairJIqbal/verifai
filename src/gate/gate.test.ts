@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -7,7 +7,7 @@ import type { NoiseFloor } from "../results/schema";
 import { compareRuns, type Noise, type NoiseSlice, type OutcomeRow } from "../stats/report";
 import type { Category } from "../tasks/schema";
 import { candidateKnobs, readCandidate, type Candidate } from "./candidates";
-import { decideGate } from "./check";
+import { categoryDropLimit, decideGate } from "./check";
 import { agentKey, newestFloorFor, rescaleNoise } from "./floor";
 import { addChangelogEntry, changelogEntry, gateComparison, listGates, rewriteConfigText, snapshotFiles, writeGateRecord } from "./record";
 import { addPromoted, checkConfigIsPromoted, readPromoted } from "./promoted";
@@ -22,6 +22,8 @@ const tries = (taskId: string, category: Category, passes: number, n = 4): Outco
 const tasks = (prefix: string, category: Category, count: number, passes: number) => Array.from({ length: count }, (_, i) => tries(`${prefix}-${i}`, category, passes)).flat();
 const slice = (floor: number, t = 10): NoiseSlice => ({ tasks: t, outcomes: t * 4, flips: 0, flipRate: 0, floor });
 const noise: Noise = { overall: slice(0.05), byCategory: { refund: slice(0.1), cancel: slice(0.1) } };
+// The promoted version's floor on both splits, which the drop limits come from.
+const promotedNoise = (n: Noise) => ({ dev: n, holdout: n });
 
 const promoted = { agentVersion: "v1", promptVersion: "v1", toolDescriptionsVersion: "v1", validation: null, exemplars: false };
 const candidate = (change: Candidate["change"], extra: Partial<Candidate> = {}): Candidate => ({ name: "v2", basedOn: "v1", targets: "wrong-tool", why: "because", change, ...extra });
@@ -107,14 +109,14 @@ describe("the gate decision", () => {
   it("passes a clear holdout gain with no category dropping", () => {
     const holdout = compareRuns(base, [...tasks("r", "refund", 8, 4), ...tasks("c", "cancel", 8, 4)], noise);
     const dev = compareRuns(base, base, noise);
-    const d = decideGate({ dev, holdout, maxDropPoints: 5 });
+    const d = decideGate({ dev, holdout, promotedNoise: promotedNoise(noise), maxDropPoints: 5 });
     expect(d.checks.find((c) => c.id === "holdout-better")?.pass).toBe(true);
     expect(d.pass).toBe(true);
   });
 
   it("fails when holdout is within noise, even if dev improved", () => {
     const better = [...tasks("r", "refund", 8, 4), ...tasks("c", "cancel", 8, 4)];
-    const d = decideGate({ dev: compareRuns(base, better, noise), holdout: compareRuns(base, base, noise), maxDropPoints: 5 });
+    const d = decideGate({ dev: compareRuns(base, better, noise), holdout: compareRuns(base, base, noise), promotedNoise: promotedNoise(noise), maxDropPoints: 5 });
     expect(d.pass).toBe(false);
     expect(d.checks.find((c) => c.id === "holdout-better")?.pass).toBe(false);
   });
@@ -123,15 +125,67 @@ describe("the gate decision", () => {
     const holdout = compareRuns(base, [...tasks("r", "refund", 8, 4), ...tasks("c", "cancel", 8, 4)], noise);
     // Every try of one of 8 cancel tasks fails on dev: 100% → 87.5%, a 12.5-point drop.
     const devRows = [...tasks("r", "refund", 8, 2), ...tasks("c", "cancel", 8, 4).map((r) => (r.taskId === "c-0" ? { ...r, passed: false } : r))];
-    const d = decideGate({ dev: compareRuns(base, devRows, noise), holdout, maxDropPoints: 5 });
+    const d = decideGate({ dev: compareRuns(base, devRows, noise), holdout, promotedNoise: promotedNoise(noise), maxDropPoints: 5 });
     expect(d.checks.find((c) => c.id === "dev-cancel")?.pass).toBe(false);
     expect(d.pass).toBe(false);
-    expect(decideGate({ dev: compareRuns(base, devRows, noise), holdout, maxDropPoints: 12.5 }).checks.find((c) => c.id === "dev-cancel")?.pass).toBe(true);
+    expect(decideGate({ dev: compareRuns(base, devRows, noise), holdout, promotedNoise: promotedNoise(noise), maxDropPoints: 12.5 }).checks.find((c) => c.id === "dev-cancel")?.pass).toBe(true);
+  });
+
+  // `failed` of the 32 cancel tries on dev fail, each one 3.125 points.
+  const devCancelDrop = (failed: number) => [...tasks("r", "refund", 8, 2), ...tasks("c", "cancel", 8, 4).map((r, i) => (i < failed ? { ...r, passed: false } : r))];
+  const gainOnHoldout = compareRuns(base, [...tasks("r", "refund", 8, 4), ...tasks("c", "cancel", 8, 4)], noise);
+  // `n` is the promoted version's floor; the comparison itself always carries `noise`.
+  const devCancel = (failed: number, n: Noise) =>
+    decideGate({ dev: compareRuns(base, devCancelDrop(failed), noise), holdout: gainOnHoldout, promotedNoise: promotedNoise(n), maxDropPoints: 5 }).checks.find((c) => c.id === "dev-cancel");
+
+  it("lets a category drop more than the minimum when that's inside its own noise floor", () => {
+    // cancel's floor is 10 points: a 6.25-point drop is noise, a 12.5-point one isn't.
+    expect(devCancel(2, noise)?.pass).toBe(true);
+    expect(devCancel(2, noise)?.label).toBe("dev cancel: drops no more than 10.0 points");
+    expect(devCancel(2, noise)?.detail).toContain("limit from the promoted version's noise floor");
+    expect(devCancel(4, noise)?.pass).toBe(false);
+  });
+
+  it("never allows less than the minimum, and holds a category with no floor to it", () => {
+    const steady: Noise = { ...noise, byCategory: { ...noise.byCategory, cancel: slice(0.02) } };
+    expect(devCancel(1, steady)?.pass).toBe(true);
+    expect(devCancel(2, steady)?.pass).toBe(false);
+    expect(devCancel(2, steady)?.label).toBe("dev cancel: drops no more than 5.0 points");
+    expect(devCancel(2, steady)?.detail).toContain("limit from the 5-point minimum");
+    const noCancelFloor: Noise = { ...noise, byCategory: { refund: slice(0.1) } };
+    expect(devCancel(2, noCancelFloor)?.pass).toBe(false);
+    expect(devCancel(2, noCancelFloor)?.detail).toContain("no noise floor measured for this category");
+  });
+
+  it("takes limits from the promoted version's floor only, not the wider one the comparison carries", () => {
+    // The comparison's cancel floor is 10 points, but the promoted version's is 2: the limit stays 5.
+    const steady: Noise = { ...noise, byCategory: { ...noise.byCategory, cancel: slice(0.02) } };
+    expect(devCancel(2, steady)?.pass).toBe(false);
+  });
+
+  it("returns the limits it used, per split and category", () => {
+    const d = decideGate({ dev: compareRuns(base, base, noise), holdout: gainOnHoldout, promotedNoise: { dev: noise, holdout: { ...noise, byCategory: { refund: slice(0.02) } } }, maxDropPoints: 5 });
+    expect(d.dropLimits).toEqual({ dev: { refund: 10, cancel: 10 }, holdout: { refund: 5, cancel: 5 } });
+  });
+
+  it("works out the limit as the larger of the minimum and the floor in points", () => {
+    expect(categoryDropLimit(0.167, 5)).toBe(16.7);
+    // Rounded down to 0.1, so rounding never loosens it.
+    expect(categoryDropLimit(0.0996, 5)).toBe(9.9);
+    expect(categoryDropLimit(0.03, 5)).toBe(5);
+    expect(categoryDropLimit(null, 5)).toBe(5);
+    expect(categoryDropLimit(NaN, 5)).toBe(5);
+  });
+
+  it("uses the floor rescaled to the split's task count", () => {
+    // Measured on 10 tasks, compared on 2.5 times fewer: √(10/4) wider, 15.8 points.
+    const scaled = rescaleNoise(noise, { overall: 4, byCategory: { refund: 4, cancel: 4 } });
+    expect(categoryDropLimit(scaled.byCategory.cancel?.floor ?? null, 5)).toBe(15.8);
   });
 
   it("fails when the two versions didn't run the same tasks", () => {
     const holdout = compareRuns(base, [...tasks("r", "refund", 8, 4), ...tasks("c", "cancel", 7, 4)], noise);
-    const d = decideGate({ dev: compareRuns(base, base, noise), holdout, maxDropPoints: 5 });
+    const d = decideGate({ dev: compareRuns(base, base, noise), holdout, promotedNoise: promotedNoise(noise), maxDropPoints: 5 });
     expect(d.checks.find((c) => c.id === "holdout-same-tasks")?.pass).toBe(false);
     expect(d.pass).toBe(false);
   });
@@ -165,6 +219,7 @@ describe("promotion files", () => {
   });
 
   const comparison = compareRuns(tasks("r", "refund", 3, 2), tasks("r", "refund", 3, 4), rescaleNoise(noise, { overall: 3, byCategory: { refund: 3 } }));
+  const dropLimits = { refund: 18.2 };
   const record: GateRecord = {
     name: "v2",
     decidedAt: "2026-10-21T10:15:00.000Z",
@@ -181,8 +236,8 @@ describe("promotion files", () => {
     triesPerTask: 4,
     runs: { promotedDev: "a", candidateDev: "b", promotedHoldout: "c", candidateHoldout: "d" },
     floor: { configKey: "k", measuredAt: "2026-10-20T00:00:00.000Z", datasetVersion: "v2", runs: ["x", "y"], tasks: 35, overall: 0.1 },
-    dev: gateComparison(comparison),
-    holdout: gateComparison(comparison),
+    dev: gateComparison(comparison, dropLimits),
+    holdout: gateComparison(comparison, dropLimits),
     maxCategoryDropPoints: 5,
     checks: [],
   };
@@ -197,6 +252,20 @@ describe("promotion files", () => {
     expect(problems).toHaveLength(1);
   });
 
+  it("saves each category's drop limit, and still reads a record from before limits were saved", () => {
+    expect(record.dev.byCategory.refund?.dropLimit).toBe(18.2);
+    expect(record.dev.overall.dropLimit).toBeUndefined();
+    const gates = join(dir, "old-gates");
+    // An undefined key isn't written to the JSON, so the file has no dropLimit.
+    const oldRefund = { ...record.dev.byCategory.refund!, dropLimit: undefined };
+    const old = { ...record.dev, byCategory: { refund: oldRefund } };
+    writeGateRecord({ ...record, dev: old, holdout: old }, gates);
+    expect(readFileSync(join(gates, readdirSync(gates)[0]), "utf8")).not.toContain("dropLimit");
+    const { gates: listed, problems } = listGates(gates);
+    expect(problems).toEqual([]);
+    expect(listed[0].dev.byCategory.refund?.dropLimit).toBeUndefined();
+  });
+
   it("writes a changelog entry with the interval, sample size, floor and dataset, newest on top", () => {
     const entry = changelogEntry(record, "results/gates/x.json");
     expect(entry).toMatch(/^## v2 · 2026-10-21/);
@@ -204,6 +273,9 @@ describe("promotion files", () => {
     expect(entry).toMatch(/95% interval/);
     expect(entry).toContain("3 tasks × 4 tries");
     expect(entry).toContain("wrong-tool, the top category");
+    expect(entry).toContain("refund +50.0 (limit 18.2)");
+    expect(entry).toContain("the larger of 5 points and the promoted version's noise floor for that category");
+    expect(entry).toContain("on holdout, estimated from dev");
     const path = join(dir, "CHANGELOG.md");
     addChangelogEntry(entry, path);
     addChangelogEntry(changelogEntry({ ...record, name: "v3" }, "y"), path);
