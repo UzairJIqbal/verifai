@@ -7,6 +7,7 @@ import { PROJECT_ROOT } from "../config";
 import type { AgentKnobs } from "../agent/versions";
 import type { Comparison, ComparisonRow } from "../stats/report";
 import { CATEGORIES, type Category } from "../tasks/schema";
+import { categoryDropLimit } from "./check";
 import { gateRecordSchema, type GateRecord, type GateRow } from "./schema";
 
 export const GATES_DIR_NAME = "gates";
@@ -26,11 +27,12 @@ export const gateRow = (r: ComparisonRow): GateRow => ({
   verdict: r.verdict,
 });
 
-export function gateComparison(c: Comparison): GateRecord["dev"] {
+// Each category row carries the drop limit the gate held it to.
+export function gateComparison(c: Comparison, maxDropPoints: number): GateRecord["dev"] {
   const byCategory: Partial<Record<Category, GateRow>> = {};
   for (const cat of CATEGORIES) {
     const row = c.byCategory[cat];
-    if (row !== undefined) byCategory[cat] = gateRow(row);
+    if (row !== undefined) byCategory[cat] = { ...gateRow(row), dropLimit: categoryDropLimit(row.floor, maxDropPoints) };
   }
   return { overall: gateRow(c.overall), byCategory };
 }
@@ -135,7 +137,7 @@ export function changelogEntry(record: GateRecord, gateFile: string): string {
     `- Dataset: ${record.datasetVersion}.`,
     metricLine("Holdout success", record.holdout.overall, record.holdout.overall.tasks, record.triesPerTask),
     metricLine("Dev success", record.dev.overall, record.dev.overall.tasks, record.triesPerTask),
-    `- By category, points: holdout ${cats(record.holdout)}; dev ${cats(record.dev)}. None dropped more than ${record.maxCategoryDropPoints}.`,
+    `- By category, points: holdout ${cats(record.holdout)}; dev ${cats(record.dev)}. None dropped more than its limit, the larger of ${record.maxCategoryDropPoints} points and its own noise floor.`,
     `- Noise floor from configuration ${record.floor.configKey} (dataset ${record.floor.datasetVersion}, ${record.floor.tasks} tasks, measured ${record.floor.measuredAt.slice(0, 10)}), rescaled to each slice's task count; the holdout floor is estimated from dev, since holdout is never run twice to measure its own.`,
     `- Runs: dev ${record.runs.promotedDev} → ${record.runs.candidateDev}; holdout ${record.runs.promotedHoldout} → ${record.runs.candidateHoldout}. Gate record: ${gateFile}.`,
     "",

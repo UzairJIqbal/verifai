@@ -9,10 +9,21 @@ export type GateDecision = { pass: boolean; checks: GateCheck[] };
 const pts = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}`;
 
 /**
+ * How many points a category may drop before the gate fails it: its own noise
+ * floor on that split (already rescaled to its task count), but never less
+ * than `minPoints`. A flat limit below the floor failed candidates on luck
+ * (D-002). No floor means the minimum, the strict side.
+ */
+export function categoryDropLimit(floor: number | null, minPoints: number): number {
+  return floor === null || Number.isNaN(floor) ? minPoints : Math.max(minPoints, floor * 100);
+}
+
+/**
  * Passes only if holdout success is better (bigger than the noise floor,
  * McNemar agrees, the interval clears zero) and no category, on dev or on
- * holdout, drops by more than `maxDropPoints`. Both comparisons are promoted
- * (A) against candidate (B) on the same tasks.
+ * holdout, drops by more than its limit (`categoryDropLimit`, at least
+ * `maxDropPoints`). Both comparisons are promoted (A) against candidate (B)
+ * on the same tasks.
  */
 export function decideGate(args: { dev: Comparison; holdout: Comparison; maxDropPoints: number }): GateDecision {
   const { dev, holdout, maxDropPoints } = args;
@@ -42,12 +53,14 @@ export function decideGate(args: { dev: Comparison; holdout: Comparison; maxDrop
       const row = c.byCategory[category];
       if (row === undefined) continue;
       const drop = -row.difference.value * 100;
+      const limit = categoryDropLimit(row.floor, maxDropPoints);
+      const from = limit > maxDropPoints ? "its noise floor" : `the ${maxDropPoints}-point minimum`;
       checks.push({
         id: `${split}-${category}`,
-        label: `${split} ${category}: drops no more than ${maxDropPoints} points`,
-        // A hair of float error mustn't fail an exact 5-point drop.
-        pass: drop <= maxDropPoints + 1e-9,
-        detail: `${pts(row.difference.value)} points on ${row.tasks} tasks (${(row.aRate * 100).toFixed(1)}% → ${(row.bRate * 100).toFixed(1)}%)`,
+        label: `${split} ${category}: drops no more than ${limit.toFixed(1)} points`,
+        // A hair of float error mustn't fail a drop of exactly the limit.
+        pass: drop <= limit + 1e-9,
+        detail: `${pts(row.difference.value)} points on ${row.tasks} tasks (${(row.aRate * 100).toFixed(1)}% → ${(row.bRate * 100).toFixed(1)}%) · limit from ${from}`,
       });
     }
   }

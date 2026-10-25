@@ -1,8 +1,8 @@
 // `pnpm gate <candidate>`: the candidate against the promoted version, on dev
 // and on holdout, same dataset, same tasks. Prints what it will spend and asks
 // first. It passes only if holdout success beats the noise floor with McNemar
-// agreeing, and no category drops by more than the config allows on either
-// split. A pass promotes the candidate (config, agent/promoted.json, changelog, its holdout tries
+// agreeing, and no category drops by more than its limit on either split: the
+// config's minimum or the category's own noise floor, whichever is larger. A pass promotes the candidate (config, agent/promoted.json, changelog, its holdout tries
 // readable); a fail changes nothing but its own record.
 //
 // This is the only code that loads holdout tasks.
@@ -253,8 +253,8 @@ async function main(): Promise<void> {
       tasks: source.floor.overall.tasks,
       overall: source.floor.overall.floor,
     },
-    dev: gateComparison(devCmp),
-    holdout: gateComparison(holdoutCmp),
+    dev: gateComparison(devCmp, config.gate.maxCategoryDropPoints),
+    holdout: gateComparison(holdoutCmp, config.gate.maxCategoryDropPoints),
     maxCategoryDropPoints: config.gate.maxCategoryDropPoints,
     checks: decision.checks,
   };

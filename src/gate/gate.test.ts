@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
@@ -7,7 +7,7 @@ import type { NoiseFloor } from "../results/schema";
 import { compareRuns, type Noise, type NoiseSlice, type OutcomeRow } from "../stats/report";
 import type { Category } from "../tasks/schema";
 import { candidateKnobs, readCandidate, type Candidate } from "./candidates";
-import { decideGate } from "./check";
+import { categoryDropLimit, decideGate } from "./check";
 import { agentKey, newestFloorFor, rescaleNoise } from "./floor";
 import { addChangelogEntry, changelogEntry, gateComparison, listGates, rewriteConfigText, snapshotFiles, writeGateRecord } from "./record";
 import { addPromoted, checkConfigIsPromoted, readPromoted } from "./promoted";
@@ -129,6 +129,42 @@ describe("the gate decision", () => {
     expect(decideGate({ dev: compareRuns(base, devRows, noise), holdout, maxDropPoints: 12.5 }).checks.find((c) => c.id === "dev-cancel")?.pass).toBe(true);
   });
 
+  // `failed` of the 32 cancel tries on dev fail, each one 3.125 points.
+  const devCancelDrop = (failed: number) => [...tasks("r", "refund", 8, 2), ...tasks("c", "cancel", 8, 4).map((r, i) => (i < failed ? { ...r, passed: false } : r))];
+  const gainOnHoldout = compareRuns(base, [...tasks("r", "refund", 8, 4), ...tasks("c", "cancel", 8, 4)], noise);
+  const devCancel = (failed: number, n: Noise) => decideGate({ dev: compareRuns(base, devCancelDrop(failed), n), holdout: gainOnHoldout, maxDropPoints: 5 }).checks.find((c) => c.id === "dev-cancel");
+
+  it("lets a category drop more than the minimum when that's inside its own noise floor", () => {
+    // cancel's floor is 10 points: a 6.25-point drop is noise, a 12.5-point one isn't.
+    expect(devCancel(2, noise)?.pass).toBe(true);
+    expect(devCancel(2, noise)?.label).toBe("dev cancel: drops no more than 10.0 points");
+    expect(devCancel(2, noise)?.detail).toContain("limit from its noise floor");
+    expect(devCancel(4, noise)?.pass).toBe(false);
+  });
+
+  it("never allows less than the minimum, and holds a category with no floor to it", () => {
+    const steady: Noise = { ...noise, byCategory: { ...noise.byCategory, cancel: slice(0.02) } };
+    expect(devCancel(1, steady)?.pass).toBe(true);
+    expect(devCancel(2, steady)?.pass).toBe(false);
+    expect(devCancel(2, steady)?.label).toBe("dev cancel: drops no more than 5.0 points");
+    expect(devCancel(2, steady)?.detail).toContain("limit from the 5-point minimum");
+    const noCancelFloor: Noise = { ...noise, byCategory: { refund: slice(0.1) } };
+    expect(devCancel(2, noCancelFloor)?.pass).toBe(false);
+  });
+
+  it("works out the limit as the larger of the minimum and the floor in points", () => {
+    expect(categoryDropLimit(0.167, 5)).toBeCloseTo(16.7, 12);
+    expect(categoryDropLimit(0.03, 5)).toBe(5);
+    expect(categoryDropLimit(null, 5)).toBe(5);
+    expect(categoryDropLimit(NaN, 5)).toBe(5);
+  });
+
+  it("uses the floor rescaled to the split's task count", () => {
+    // Measured on 10 tasks, compared on 2.5 times fewer: √(10/4) wider, 15.8 points.
+    const scaled = rescaleNoise(noise, { overall: 4, byCategory: { refund: 4, cancel: 4 } });
+    expect(categoryDropLimit(scaled.byCategory.cancel?.floor ?? null, 5)).toBeCloseTo(10 * Math.sqrt(10 / 4), 12);
+  });
+
   it("fails when the two versions didn't run the same tasks", () => {
     const holdout = compareRuns(base, [...tasks("r", "refund", 8, 4), ...tasks("c", "cancel", 7, 4)], noise);
     const d = decideGate({ dev: compareRuns(base, base, noise), holdout, maxDropPoints: 5 });
@@ -181,8 +217,8 @@ describe("promotion files", () => {
     triesPerTask: 4,
     runs: { promotedDev: "a", candidateDev: "b", promotedHoldout: "c", candidateHoldout: "d" },
     floor: { configKey: "k", measuredAt: "2026-10-20T00:00:00.000Z", datasetVersion: "v2", runs: ["x", "y"], tasks: 35, overall: 0.1 },
-    dev: gateComparison(comparison),
-    holdout: gateComparison(comparison),
+    dev: gateComparison(comparison, 5),
+    holdout: gateComparison(comparison, 5),
     maxCategoryDropPoints: 5,
     checks: [],
   };
@@ -197,6 +233,21 @@ describe("promotion files", () => {
     expect(problems).toHaveLength(1);
   });
 
+  it("saves each category's drop limit, and still reads a record from before limits were saved", () => {
+    // refund's floor here is 10 points rescaled from 10 tasks to 3.
+    expect(record.dev.byCategory.refund?.dropLimit).toBeCloseTo(10 * Math.sqrt(10 / 3), 12);
+    expect(record.dev.overall.dropLimit).toBeUndefined();
+    const gates = join(dir, "old-gates");
+    // An undefined key isn't written to the JSON, so the file has no dropLimit.
+    const oldRefund = { ...record.dev.byCategory.refund!, dropLimit: undefined };
+    const old = { ...record.dev, byCategory: { refund: oldRefund } };
+    writeGateRecord({ ...record, dev: old, holdout: old }, gates);
+    expect(readFileSync(join(gates, readdirSync(gates)[0]), "utf8")).not.toContain("dropLimit");
+    const { gates: listed, problems } = listGates(gates);
+    expect(problems).toEqual([]);
+    expect(listed[0].dev.byCategory.refund?.dropLimit).toBeUndefined();
+  });
+
   it("writes a changelog entry with the interval, sample size, floor and dataset, newest on top", () => {
     const entry = changelogEntry(record, "results/gates/x.json");
     expect(entry).toMatch(/^## v2 · 2026-10-21/);
@@ -204,6 +255,7 @@ describe("promotion files", () => {
     expect(entry).toMatch(/95% interval/);
     expect(entry).toContain("3 tasks × 4 tries");
     expect(entry).toContain("wrong-tool, the top category");
+    expect(entry).toContain("None dropped more than its limit, the larger of 5 points and its own noise floor.");
     const path = join(dir, "CHANGELOG.md");
     addChangelogEntry(entry, path);
     addChangelogEntry(changelogEntry({ ...record, name: "v3" }, "y"), path);
