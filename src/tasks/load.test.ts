@@ -5,7 +5,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { writeShop } from "../shop/seed";
 import { gradeState } from "../graders/state";
 import { runReference } from "../eval/conversation";
-import { addDevTask, freezeHoldout, loadTasks, nextTaskId, TASK_FILES, type TaskFiles } from "./load";
+import { addDevTask, addTasks, freezeHoldout, loadTasks, nextTaskId, TASK_FILES, type TaskFiles } from "./load";
 import { makeDraft, readDraft, writeDraft } from "./draft";
 import { readdirSync, statSync } from "node:fs";
 
@@ -169,6 +169,48 @@ describe("regression tasks", () => {
     const { task, from: back } = readDraft("cancel-90", source, drafts);
     expect(task).not.toHaveProperty("_from");
     expect(back).toEqual(from);
+  });
+});
+
+describe("a new task set", () => {
+  const sources = () => {
+    const dev = loadTasks({ files }).tasks;
+    const cancel = dev.find((t) => t.category === "cancel" && t.expected.changes.length > 0);
+    const refund = dev.find((t) => t.category === "refund" && t.expected.changes.length > 0);
+    if (!cancel || !refund) throw new Error("no dev cancel or refund task with changes");
+    return {
+      dev: { ...cancel, id: nextTaskId("cancel", files), first_message: `${cancel.first_message} Thanks.` },
+      holdout: { ...refund, id: nextTaskId("refund", files), split: "holdout" as const, first_message: `${refund.first_message} Thanks.` },
+    };
+  };
+
+  it("goes in as one bump, re-freezing the holdout on purpose when it adds to it", () => {
+    const before = loadTasks({ files });
+    const lock = readFileSync(files.lock, "utf8");
+    const { dev, holdout } = sources();
+    const { version } = addTasks([dev, holdout], "fresh tasks", { files, seedPath, now: new Date("2026-01-03T00:00:00Z") });
+    const after = loadTasks({ files });
+    expect(version).toBe(`v${Number(before.version.slice(1)) + 1}`);
+    expect(after.version).toBe(version);
+    expect(after.tasks.map((t) => t.id)).toContain(dev.id);
+    expect(after.tasks.map((t) => t.id)).not.toContain(holdout.id);
+    expect(after.holdoutCounts.refund).toBe(before.holdoutCounts.refund + 1);
+    expect(loadTasks({ files, gating: true }).tasks.map((t) => t.id)).toContain(holdout.id);
+    expect(readFileSync(files.lock, "utf8")).not.toBe(lock);
+    expect(readFileSync(files.changelog, "utf8")).toMatch(
+      new RegExp(`2026-01-03 · ${version} · 2 tasks added \\(dev ${dev.id}; holdout ${holdout.id}\\); holdout re-frozen .* fresh tasks`),
+    );
+  });
+
+  it("adds nothing when one of them is wrong", () => {
+    const tasksBefore = readFileSync(files.tasks, "utf8");
+    const lock = readFileSync(files.lock, "utf8");
+    const { dev, holdout } = sources();
+    expect(() => addTasks([dev, { ...holdout, expected: { ...holdout.expected, changes: [] } }], "x", { files, seedPath })).toThrow(/Not added. refund-/);
+    expect(() => addTasks([dev, { ...dev }], "x", { files, seedPath })).toThrow(/already a task/);
+    expect(() => addTasks([dev], " ", { files, seedPath })).toThrow(/Say why/);
+    expect(readFileSync(files.tasks, "utf8")).toBe(tasksBefore);
+    expect(readFileSync(files.lock, "utf8")).toBe(lock);
   });
 });
 

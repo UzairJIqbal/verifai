@@ -1,6 +1,6 @@
 {
-  "dataset_version": "v2",
-  "fingerprint": "326fb1c38ac896633b4964bde40ece35bd956065bd0bb42297a597dd284c6c40",
-  "holdout_count": 15,
-  "frozen_at": "2026-10-18T13:48:16.565Z"
+  "dataset_version": "v3",
+  "fingerprint": "4536d05412072e2a29c0736f9457c413404eebf64c069642e057f38f97c31ac8",
+  "holdout_count": 25,
+  "frozen_at": "2026-10-20T21:53:17.650Z"
 }

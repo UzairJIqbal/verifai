@@ -180,44 +180,85 @@ export function nextTaskId(category: Category, files: TaskFiles = TASK_FILES, re
 
 /**
  * Adds a regression task to dev and bumps the dataset version, since scores on
- * different task sets aren't comparable. The task's reference calls must
- * produce exactly its expected changes. Holdout is never touched, so its lock
+ * different task sets aren't comparable. Holdout is never touched, so its lock
  * stays as it is; the changelog line says what was added and why.
  */
 export function addDevTask(task: Task, reason: string, options: { files?: TaskFiles; seedPath?: string; now?: Date } = {}): { version: string } {
-  if (reason.trim() === "") throw new Error("Say why the task is being added.");
   if (task.split !== "dev") throw new Error("A regression task goes to dev. Holdout tasks change only by re-freezing on purpose.");
-  if (!task.id.startsWith(`${task.category}-`)) throw new Error(`The id ${task.id} doesn't start with its category, ${task.category}.`);
+  return addTasks([task], reason, options);
+}
+
+/**
+ * Adds new tasks in one dataset bump. Each must have a free id and reference
+ * calls that produce exactly its expected changes; tasks already in the file
+ * are never touched. When any new task goes to holdout, the holdout is
+ * re-frozen as part of the same step, and the changelog line says so and why.
+ * If any part can't be written, the tasks file and lock are put back.
+ */
+export function addTasks(newTasks: Task[], reason: string, options: { files?: TaskFiles; seedPath?: string; now?: Date } = {}): { version: string } {
+  if (reason.trim() === "") throw new Error("Say why the tasks are being added.");
+  if (newTasks.length === 0) throw new Error("No tasks to add.");
   const files = options.files ?? TASK_FILES;
   const { version, tasks } = readTaskFile(files.tasks);
   checkLock(files, tasks);
-  if (tasks.some((t) => t.id === task.id)) throw new Error(`${task.id} is already a task. Pick a free id.`);
 
-  const { trajectory, errors } = runReference(task, options.seedPath);
-  if (errors.length > 0) throw new Error(`Not added. A reference call failed: ${errors.join("; ")}`);
-  const verdict = gradeState(task, trajectory);
-  if (!verdict.pass) throw new Error(`Not added. Its expected changes don't match its reference calls: ${verdict.reason}`);
+  const ids = new Set(tasks.map((t) => t.id));
+  for (const task of newTasks) {
+    if (!task.id.startsWith(`${task.category}-`)) throw new Error(`The id ${task.id} doesn't start with its category, ${task.category}.`);
+    if (ids.has(task.id)) throw new Error(`${task.id} is already a task. Pick a free id.`);
+    ids.add(task.id);
+    const { trajectory, errors } = runReference(task, options.seedPath);
+    if (errors.length > 0) throw new Error(`Not added. ${task.id}: a reference call failed: ${errors.join("; ")}`);
+    const verdict = gradeState(task, trajectory);
+    if (!verdict.pass) throw new Error(`Not added. ${task.id}: its expected changes don't match its reference calls: ${verdict.reason}`);
+  }
 
   const next = nextDatasetVersion(version);
+  const all = [...tasks, ...newTasks];
   const before = readFileSync(/*turbopackIgnore: true*/ files.tasks, "utf8");
+  const lockBefore = readFileSync(/*turbopackIgnore: true*/ files.lock, "utf8");
   const lines = before.split("\n").filter((l, i) => i > 0 && l.trim() !== "");
   // Written beside it, then renamed over it: a crash halfway leaves the old
   // file whole, never a cut-off one.
-  const replaceTasks = (text: string) => {
-    const temp = `${files.tasks}.tmp`;
+  const replace = (path: string, text: string) => {
+    const temp = `${path}.tmp`;
     writeFileSync(/*turbopackIgnore: true*/ temp, text);
-    renameSync(/*turbopackIgnore: true*/ temp, files.tasks);
+    renameSync(/*turbopackIgnore: true*/ temp, path);
   };
-  replaceTasks([JSON.stringify({ dataset_version: next }), ...lines, JSON.stringify(taskSchema.parse(task))].join("\n") + "\n");
-  const day = (options.now ?? new Date()).toISOString().slice(0, 10);
-  // The task and its changelog line go in together: if the line can't be
-  // written, the old dataset is put back and nothing was added.
+  const now = options.now ?? new Date();
+  const day = now.toISOString().slice(0, 10);
+  const dev = newTasks.filter((t) => t.split === "dev").map((t) => t.id);
+  const holdout = newTasks.filter((t) => t.split === "holdout").map((t) => t.id);
+  let what: string;
+  if (holdout.length === 0) {
+    what = `dev task${dev.length === 1 ? "" : "s"} ${dev.join(", ")} added (holdout unchanged).`;
+  } else {
+    const fingerprint = holdoutFingerprint(all);
+    const total = Object.values(countHoldout(all)).reduce((a, b) => a + b, 0);
+    what =
+      `${newTasks.length} tasks added (dev ${dev.length === 0 ? "none" : dev.join(", ")}; holdout ${holdout.join(", ")}); ` +
+      `holdout re-frozen (${total} of ${all.length} tasks, fingerprint ${fingerprint.slice(0, 12)}).`;
+  }
+
+  replace(files.tasks, [JSON.stringify({ dataset_version: next }), ...lines, ...newTasks.map((t) => JSON.stringify(taskSchema.parse(t)))].join("\n") + "\n");
+  // The tasks, the lock and the changelog line go in together: if a later one
+  // can't be written, the earlier ones are put back and nothing was added.
   try {
+    if (holdout.length > 0) {
+      const lock: z.infer<typeof lockSchema> = {
+        dataset_version: next,
+        fingerprint: holdoutFingerprint(all),
+        holdout_count: Object.values(countHoldout(all)).reduce((a, b) => a + b, 0),
+        frozen_at: now.toISOString(),
+      };
+      replace(files.lock, `${JSON.stringify(lock, null, 2)}\n`);
+    }
     if (!existsSync(/*turbopackIgnore: true*/ files.changelog)) writeFileSync(/*turbopackIgnore: true*/ files.changelog, "# Tasks changelog\n\nEvery change to the holdout, and why.\n\n");
-    appendFileSync(/*turbopackIgnore: true*/ files.changelog, `- ${day} · ${next} · dev task ${task.id} added (holdout unchanged). ${reason.trim()} Scores from ${version} and ${next} are not comparable.\n`);
+    appendFileSync(/*turbopackIgnore: true*/ files.changelog, `- ${day} · ${next} · ${what} ${reason.trim()} Scores from ${version} and ${next} are not comparable.\n`);
   } catch (error) {
-    replaceTasks(before);
-    throw new Error(`Not added: the tasks changelog couldn't be written (${error instanceof Error ? error.message : String(error)}). The dataset is back to ${version}.`);
+    replace(files.tasks, before);
+    replace(files.lock, lockBefore);
+    throw new Error(`Not added: the tasks changelog or lock couldn't be written (${error instanceof Error ? error.message : String(error)}). The dataset is back to ${version}.`);
   }
   return { version: next };
 }

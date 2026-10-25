@@ -27,6 +27,11 @@
       "definition": "Stated something as fact that no tool returned and the policy doesn't say."
     },
     {
+      "id": "garbled-output",
+      "name": "Garbled reply",
+      "definition": "The reply broke down: it leaked the model's reasoning, wrote a tool call as text instead of making it, or repeated itself, so the action never happened."
+    },
+    {
       "id": "task-wrong",
       "name": "Test setup was wrong (fixed)",
       "definition": "The agent did the right thing and dataset v1's test failed it: the test customer only answered replies with a question mark, so \"Please confirm you'd like me to proceed.\" got no answer, or the reply grader missed a correct date or \"14-day\" written with non-breaking hyphens. Both are fixed in dataset v2."
