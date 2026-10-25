@@ -15,7 +15,7 @@ A taxonomy with counts and a top category to fix. Changing the prompt and rerunn
 - **Exemplar memory**, switchable in the config. Successful dev trajectories are stored with an embedding of their first customer message; at run time the two most similar are added to the prompt as examples.
 - **The gate command.** Runs the candidate and the current promoted version on dev and holdout, then decides:
   - holdout success improved by more than the noise floor, and the paired test agrees;
-  - no category dropped by more than the larger of 5 points and that category's own noise floor (scaled to its task count on that split), on dev or holdout. (Changed 2026-10-25 from a flat 5 points, decided before gate v3: measured luck moves categories 9 to 17 points. See DECISIONS.md D-002.)
+  - no category dropped by more than the larger of 5 points and the promoted version's noise floor for that category (scaled to its task count on that split), on dev or holdout. (Changed 2026-10-25 from a flat 5 points, decided before gate v3: measured luck moves categories 9 to 17 points. See DECISIONS.md D-002.)
   
   It prints a pass or fail table with each check, its numbers and intervals.
 - **Promote.** A passing candidate becomes the promoted version. Its holdout trajectories become readable on the dashboard.
