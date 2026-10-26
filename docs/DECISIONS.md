@@ -117,7 +117,21 @@ same hand fix.
 
 **Trade-off.** A task whose call always times out would never finish; the run
 stops loudly each time instead of recording a fail. That's visible, not
-silent, and raising `agent.stepTimeoutSeconds` is the fix.
+silent, and raising `agent.stepTimeoutSeconds` is the fix. Review flagged this
+as the main risk; it was kept, because the step timeout fired on transfer-13
+with nothing wrong in the agent, and the stop message now names a slow
+provider as well as the connection.
+
+**Changed in review of PR #4.** No-answer and errored streaks are counted
+apart, so a stop names what happened. Ctrl-C reads as Ctrl-C even after a
+dropped try. The step-timeout check unwraps a retry first, as the runner does,
+so a saved message and the runner never disagree. `pnpm redo-no-answer`
+refuses a noise run unless today's configuration and fingerprint are the ones
+it ran with (otherwise `pnpm noise` would leave it open for good or start a
+whole new run), and lets both runs of one pair be reopened; `pnpm noise` then
+carries on the exact runs its measurement names. Finished runs that aren't
+behind a current noise floor are still refused: nothing would carry them on,
+and rewriting them changes old numbers nothing compares against.
 
 **Status.** Accepted (2026-10-26).
 

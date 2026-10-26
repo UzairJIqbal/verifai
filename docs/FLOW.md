@@ -369,9 +369,12 @@ task touches them.
 |---|---|
 | src/eval/provider-errors.ts:36 | `classifyFailure`: new kind "network" for no status or the step timeout |
 | src/eval/runner.ts:112 | `NoAnswer` (new) |
-| src/eval/runner.ts:262 | `runOne`: returns a no-answer marker instead of an errored try |
-| src/eval/runner.ts:381 | `runTrials`: doesn't save a no-answer try; stops after 3 in a row; a run with one doesn't finish |
+| src/eval/runner.ts:264 | `runOne`: returns a no-answer marker instead of an errored try |
+| src/eval/runner.ts:383 | `runTrials`: doesn't save a no-answer try; stops after 3 no-answer tries in a row (counted apart from errored ones); a run with one doesn't finish |
 | src/eval/session.ts:238 | `closeSession` (new): a failed trace flush is a warning; the store always closes |
 | src/eval/store.ts:292 | `reopenRun`, `dropTries` (new) |
-| src/agent/model.ts:147 | `wasNoAnswer` (new): spots a saved no-answer try by its message |
+| src/agent/model.ts:148 | `wasNoAnswer` (new): spots a saved no-answer try by its message |
+| src/agent/model.ts | `describeModelError`: unwraps a retry before the timeout check |
+| src/eval/session.ts | `executeRun`: `carryOn` names the run to carry on |
+| scripts/noise.ts | carries on the runs its measurement names |
 | scripts/redo-no-answer.ts | `pnpm redo-no-answer <run>` (new) |

@@ -1,5 +1,5 @@
 import { PassThrough } from "node:stream";
-import { APICallError } from "ai";
+import { APICallError, RetryError } from "ai";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../config";
 import { describeModelError, wasNoAnswer } from "../agent/model";
@@ -173,6 +173,10 @@ describe("provider errors", () => {
     const unreachable = new APICallError({ message: "Cannot connect to API: getaddrinfo ENOTFOUND api.groq.com", url: "u", requestBodyValues: {}, isRetryable: true });
     expect(wasNoAnswer(describeModelError(unreachable, member, 60))).toBe(true);
     expect(wasNoAnswer(describeModelError(new DOMException("x", "TimeoutError"), member, 60))).toBe(true);
+    // A timeout inside a RetryError is read the same way by both.
+    const retried = new RetryError({ message: "failed after retries", reason: "maxRetriesExceeded", errors: [new DOMException("x", "TimeoutError")] });
+    expect(classifyFailure(retried, describe_).kind).toBe("network");
+    expect(wasNoAnswer(describeModelError(retried, member, 60))).toBe(true);
     expect(wasNoAnswer(describeModelError(err(500, "internal error"), member, 60))).toBe(false);
     expect(wasNoAnswer(describeModelError(err(400, "bad request"), member, 60))).toBe(false);
   });

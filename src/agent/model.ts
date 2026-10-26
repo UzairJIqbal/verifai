@@ -118,10 +118,11 @@ export const firstInPool = (config: Config): PoolMember => config.agent.pool[0];
 export function describeModelError(error: unknown, member: PoolMember, stepTimeoutSeconds: number): string {
   const { label, env } = PROVIDERS[member.provider];
   const envNames = env.map((e) => e.env).join(" and ");
-  if (error instanceof Error && error.name === "TimeoutError") {
+  // Unwrapped first, as classifyFailure does, so the two always agree.
+  const cause = RetryError.isInstance(error) ? error.lastError : error;
+  if (cause instanceof Error && cause.name === "TimeoutError") {
     return `${label} didn't answer within ${stepTimeoutSeconds} seconds. It may be busy; try again, or raise agent.stepTimeoutSeconds in verifai.config.json.`;
   }
-  const cause = RetryError.isInstance(error) ? error.lastError : error;
   if (APICallError.isInstance(cause)) {
     if (cause.statusCode === 429) {
       return `${label} says too many requests (429). Wait a minute and try again; if it keeps happening, today's free limit may be used up.`;

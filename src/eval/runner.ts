@@ -197,8 +197,10 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
   const halt: { stop: { reason: StopReason; message: string } | null; crash: unknown } = { stop: null, crash: null };
   const stopping = () => halt.stop !== null || halt.crash !== null || o.stopRequested();
   const abandon = () => new StopRun("interrupted", "Stopped before this try finished.");
-  // Errored or unanswered tries in a row, and tries dropped for no answer.
+  // Kept apart, so a stop names what really happened. A try the model
+  // answered, errored or not, shows the connection works.
   let errorsInARow = 0;
+  let noAnswerInARow = 0;
   let dropped = 0;
 
   // Shared by every try. A provider whose daily limit is used up is skipped
@@ -380,12 +382,12 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
           const trial = await runOne(task, tryNumber);
           if ("noAnswer" in trial) {
             dropped++;
-            errorsInARow++;
+            noAnswerInARow++;
             o.onNotice(`${task.id} try ${tryNumber} got no answer: ${trial.noAnswer} Not saved; carrying on redoes it.`);
-            if (errorsInARow >= STOP_AFTER_ERRORS_IN_A_ROW) {
+            if (noAnswerInARow >= STOP_AFTER_ERRORS_IN_A_ROW) {
               halt.stop ??= {
                 reason: "network",
-                message: `${errorsInARow} tries in a row got no answer from the model. Check the connection. The last one said: ${trial.noAnswer}`,
+                message: `${noAnswerInARow} tries in a row got no answer from the model. Check the connection (or, if each waited out the step timeout, the provider is slow). The last one said: ${trial.noAnswer}`,
               };
             }
             return;
@@ -398,6 +400,7 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
             }
           }
           store.saveTrial(o.runId, trial);
+          noAnswerInARow = 0;
           progress.done++;
           progress[trial.status]++;
           report();
@@ -425,6 +428,7 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
 
   if (halt.crash !== null) throw halt.crash;
   if (halt.stop !== null) return { finished: false, ...halt.stop };
+  if (o.stopRequested()) return { finished: false, reason: "interrupted", message: "Stopped by Ctrl-C." };
   if (dropped > 0) {
     return { finished: false, reason: "network", message: `${dropped} ${dropped === 1 ? "try" : "tries"} got no answer from the model and weren't saved.` };
   }

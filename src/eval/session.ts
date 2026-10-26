@@ -406,12 +406,15 @@ export type RunOutcome = { run: StoredRun; finished: true; report: Report; dir: 
 
 // Runs (or carries on) the run with the session's configuration. It never
 // carries on `notRun`, so a noise measurement's second run can't be its first.
-export async function executeRun(s: Session, args: { title: string; command: string; notRun?: string }): Promise<RunOutcome> {
+// `carryOn` names the unfinished run to carry on when more than one has this
+// configuration (both runs of a noise pair, reopened to redo tries).
+export async function executeRun(s: Session, args: { title: string; command: string; notRun?: string; carryOn?: string }): Promise<RunOutcome> {
   const { config, runConfig, store, labels, smoke, useCache } = s;
   const fingerprint = runFingerprint(runConfig);
 
   let run: StoredRun;
-  const found = store.findUnfinishedRun(fingerprint);
+  const named = args.carryOn === undefined ? null : store.getRun(args.carryOn);
+  const found = named !== null && named.status === "running" && runFingerprint(named.config) === fingerprint ? named : store.findUnfinishedRun(fingerprint);
   const existing = found !== null && found.id !== args.notRun ? found : null;
   if (existing) {
     run = existing;

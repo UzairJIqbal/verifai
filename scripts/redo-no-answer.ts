@@ -9,12 +9,12 @@ import { styleText } from "node:util";
 import { loadConfig } from "../src/config";
 import { poolSecrets, wasNoAnswer } from "../src/agent/model";
 import { makeRedactor } from "../src/eval/redact";
-import { ask, dim, fatal } from "../src/eval/session";
+import { ask, dim, fatal, openSession } from "../src/eval/session";
 import { EVAL_STORE_PATH, EvalStore } from "../src/eval/store";
 import { langfuseSecrets } from "../src/eval/tracing";
 import { judgeSecrets } from "../src/judge/model";
 import { readNoiseFloors } from "../src/results/read";
-import { tasksHash } from "../src/eval/plan";
+import { runFingerprint, tasksHash } from "../src/eval/plan";
 import { loadTasks } from "../src/tasks/load";
 
 const USAGE = "Usage: pnpm redo-no-answer <runId>   (run ids are the folder names under results/)";
@@ -35,8 +35,11 @@ async function main(): Promise<void> {
   const run = store.getRun(runId) ?? stop(`There's no run ${runId} in the eval store. The runs page lists them.`);
   // Carrying a run on needs the tasks it ran on.
   const loaded = loadTasks();
-  if (loaded.version !== run.config.datasetVersion || (run.config.split === "dev" && tasksHash(loaded.tasks) !== run.config.tasksHash)) {
+  if (loaded.version !== run.config.datasetVersion) {
     stop(`${runId} ran on dataset ${run.config.datasetVersion}, and the tasks are now ${loaded.version}, so nothing could carry it on. It's left as it is.`);
+  }
+  if (run.config.split === "dev" && tasksHash(loaded.tasks) !== run.config.tasksHash) {
+    stop(`The dev tasks have changed since ${runId} ran, without a new dataset version, so nothing could carry it on. Bump the version in evals/tasks.jsonl.`);
   }
   const dropping = store.loadTrials(runId).filter((t) => t.status === "errored" && t.error !== null && wasNoAnswer(t.error));
   if (dropping.length === 0) {
@@ -55,8 +58,21 @@ async function main(): Promise<void> {
     if (floor === undefined) {
       stop(`${runId} is finished and isn't one of the runs behind a current noise floor, so nothing would carry it on. Only unfinished runs and finished noise runs can be redone.`);
     }
+    // `pnpm noise` finds the measurement by today's configuration and carries
+    // the run on by its fingerprint; if either has moved on, the run would
+    // stay reopened for good, or a whole new run would start in its place.
+    const s = await openSession({ useCache: false, smoke: false });
+    const current = { configKey: s.configKey, fingerprint: runFingerprint(s.runConfig) };
+    await s.close();
+    if (current.configKey !== floor.configKey || current.fingerprint !== runFingerprint(run.config)) {
+      stop(`${runId} was measured with a configuration that isn't today's (${floor.configKey}, now ${current.configKey}), so \`pnpm noise\` couldn't carry it on. It's left as it is.`);
+    }
+    // Both runs of a pair may have tries to redo: the second joins the
+    // measurement the first reopened. Any other measurement must finish first.
     const under = store.noiseMeasurement(floor.configKey);
-    if (under !== null) stop(`A noise measurement for ${floor.configKey} is already under way (${under.runA} and ${under.runB}). Finish it with \`pnpm noise\` first.`);
+    if (under !== null && (under.runA !== floor.runs[0] || under.runB !== floor.runs[1])) {
+      stop(`A different noise measurement for ${floor.configKey} is under way (${under.runA} and ${under.runB}). Finish it with \`pnpm noise\` first.`);
+    }
     reopen = { configKey: floor.configKey, runA: floor.runs[0], runB: floor.runs[1] };
   }
 

@@ -407,6 +407,35 @@ describe("runner", () => {
     expect(store.loadTrials("r1")).toHaveLength(0);
   });
 
+  it("keeps no-answer and errored streaks apart, so a stop names what happened", async () => {
+    const store = newStore();
+    let n = 0;
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        n++;
+        if (n <= 2) throw new APICallError({ message: "Cannot connect to API: getaddrinfo ENOTFOUND api.groq.com", url: "https://example.test", requestBodyValues: {}, isRetryable: true });
+        if (n === 3) throw apiError(500, "internal error");
+        return reply("Your order is processing.");
+      },
+    });
+    const { outcome } = await run(model, store, "r1", { useCache: false });
+    expect(outcome).toMatchObject({ finished: false, reason: "network", message: "2 tries got no answer from the model and weren't saved." });
+    expect(store.loadTrials("r1").filter((t) => t.status === "errored")).toHaveLength(1);
+  });
+
+  it("says Ctrl-C when it was Ctrl-C, even after a try got no answer", async () => {
+    const store = newStore();
+    let n = 0;
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        if (++n === 1) throw new APICallError({ message: "Cannot connect to API: getaddrinfo ENOTFOUND api.groq.com", url: "https://example.test", requestBodyValues: {}, isRetryable: true });
+        return reply("Your order is processing.");
+      },
+    });
+    const { outcome } = await run(model, store, "r1", { useCache: false, stopAfterTries: 2 });
+    expect(outcome).toMatchObject({ finished: false, reason: "interrupted" });
+  });
+
   it("redoes a dropped try of a finished run once it's reopened", async () => {
     const store = newStore();
     const model = new MockLanguageModelV4({ doGenerate: async () => reply("Your order is processing.") });
