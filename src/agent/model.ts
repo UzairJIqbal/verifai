@@ -118,10 +118,11 @@ export const firstInPool = (config: Config): PoolMember => config.agent.pool[0];
 export function describeModelError(error: unknown, member: PoolMember, stepTimeoutSeconds: number): string {
   const { label, env } = PROVIDERS[member.provider];
   const envNames = env.map((e) => e.env).join(" and ");
-  if (error instanceof Error && error.name === "TimeoutError") {
+  // Unwrapped first, as classifyFailure does, so the two always agree.
+  const cause = RetryError.isInstance(error) ? error.lastError : error;
+  if (cause instanceof Error && cause.name === "TimeoutError") {
     return `${label} didn't answer within ${stepTimeoutSeconds} seconds. It may be busy; try again, or raise agent.stepTimeoutSeconds in verifai.config.json.`;
   }
-  const cause = RetryError.isInstance(error) ? error.lastError : error;
   if (APICallError.isInstance(cause)) {
     if (cause.statusCode === 429) {
       return `${label} says too many requests (429). Wait a minute and try again; if it keeps happening, today's free limit may be used up.`;
@@ -139,6 +140,12 @@ export function describeModelError(error: unknown, member: PoolMember, stepTimeo
   }
   return `The ${label} call failed: ${cause instanceof Error ? cause.message : String(cause)}`;
 }
+
+// Whether a saved try's error is one of the messages above for a call that
+// got no answer at all: the step timeout, or no status (DNS, a refused, reset
+// or timed-out connection). For tries saved before such tries were dropped
+// unsaved; the runner itself goes by the error, not its wording.
+export const wasNoAnswer = (error: string): boolean => /didn't answer within \d+ seconds|call failed \(no status\)/.test(error);
 
 // A rate limit is worth waiting out; any other failure isn't.
 export function isRateLimited(error: unknown): boolean {

@@ -18,10 +18,10 @@ async function main(): Promise<void> {
   const measurement = store.noiseMeasurement(configKey) ?? { configKey, runA: null, runB: null };
   const isFinished = (id: string | null) => id !== null && store.getRun(id)?.status === "finished";
 
-  // What's left across both runs: the first's remaining tries, then all of
-  // the second's (or what it has left).
+  // What's left across both runs: each one's remaining tries, or all of a
+  // run not started yet.
   const a = remainingTries(s, measurement.runA);
-  const b = isFinished(measurement.runA) ? remainingTries(s, measurement.runB) : remainingTries(s, null);
+  const b = remainingTries(s, measurement.runB);
   const total = s.tasks.length * s.runConfig.triesPerTask;
   const budget = budgetFor(s, a.left + b.left, 0);
   const perDay = budget.providers.reduce((sum, p) => sum + p.callsPerDay, 0);
@@ -58,7 +58,7 @@ async function main(): Promise<void> {
     if (isFinished(measurement[slot])) continue;
     console.log("");
     const other = slot === "runA" ? measurement.runB : measurement.runA;
-    const outcome = await executeRun(s, { title: `noise run ${slot === "runA" ? 1 : 2} of 2`, command: COMMAND, notRun: other ?? undefined });
+    const outcome = await executeRun(s, { title: `noise run ${slot === "runA" ? 1 : 2} of 2`, command: COMMAND, notRun: other ?? undefined, carryOn: measurement[slot] ?? undefined });
     measurement[slot] = outcome.run.id;
     store.saveNoiseMeasurement(measurement);
     if (!outcome.finished) {

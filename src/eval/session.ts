@@ -225,11 +225,27 @@ export async function openSession(args: { useCache: boolean; smoke: boolean; pla
     configKey: configKey(runConfig),
     useCache,
     smoke,
-    close: async () => {
-      if (tracing.on) await tracing.shutdown();
-      store.close();
-    },
+    close: () => closeSession(tracing, store, (message) => console.warn(styleText("yellow", message))),
   };
+}
+
+/**
+ * Sends the last traces, then closes the store. Traces are for looking at;
+ * the store and the results files are the record, and they're already saved.
+ * So a Langfuse that can't be reached (no Wi-Fi) is a warning, never a crash,
+ * and the store is closed whatever happens.
+ */
+export async function closeSession(tracing: Tracing, store: Pick<EvalStore, "close">, warn: (message: string) => void): Promise<void> {
+  try {
+    if (tracing.on) await tracing.shutdown();
+  } catch (error) {
+    // The exporter rejects with an array of errors, not one.
+    const errors = [error].flat();
+    const said = errors.map((e) => (e instanceof Error ? e.message : String(e))).join("; ");
+    warn(`Some traces didn't reach Langfuse (${said}). The tries themselves are saved.`);
+  } finally {
+    store.close();
+  }
 }
 
 /**
@@ -390,12 +406,15 @@ export type RunOutcome = { run: StoredRun; finished: true; report: Report; dir: 
 
 // Runs (or carries on) the run with the session's configuration. It never
 // carries on `notRun`, so a noise measurement's second run can't be its first.
-export async function executeRun(s: Session, args: { title: string; command: string; notRun?: string }): Promise<RunOutcome> {
+// `carryOn` names the unfinished run to carry on when more than one has this
+// configuration (both runs of a noise pair, reopened to redo tries).
+export async function executeRun(s: Session, args: { title: string; command: string; notRun?: string; carryOn?: string }): Promise<RunOutcome> {
   const { config, runConfig, store, labels, smoke, useCache } = s;
   const fingerprint = runFingerprint(runConfig);
 
   let run: StoredRun;
-  const found = store.findUnfinishedRun(fingerprint);
+  const named = args.carryOn === undefined ? null : store.getRun(args.carryOn);
+  const found = named !== null && named.status === "running" && runFingerprint(named.config) === fingerprint ? named : store.findUnfinishedRun(fingerprint);
   const existing = found !== null && found.id !== args.notRun ? found : null;
   if (existing) {
     run = existing;
@@ -524,7 +543,7 @@ export async function executeRun(s: Session, args: { title: string; command: str
   if (!outcome.finished) {
     const passed = trials.filter((t) => t.status === "passed").length;
     console.log(styleText(["yellow", "bold"], `\n■ Stopped: ${outcome.message}`));
-    console.log(`  ${trials.length} of ${total} tries done (${passed} passed so far). Nothing is lost; finished tries are saved and never redone.`);
+    console.log(`  ${trials.length} of ${total} tries done (${passed} passed so far). Finished tries are saved and never redone; a try that got no answer wasn't saved, so carrying on redoes it.`);
     console.log(`  To carry on: ${styleText("bold", args.command)}${outcome.reason === "daily" ? " (after the limit resets)" : ""}`);
     if (outcome.reason === "config") console.log("  Fix the problem above first.");
     return { run, finished: false };

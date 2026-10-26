@@ -9,8 +9,12 @@ export type CallFailure =
   | { kind: "busy"; message: string; waitMs: number | null; limit: boolean }
   // The key, the model name or the account is wrong: every call would fail.
   | { kind: "config"; message: string }
-  // Something about this one call (network, a timeout, output the provider
-  // couldn't parse): the try is recorded as errored and the run goes on.
+  // The call got no answer at all: no status came back (DNS, a refused, reset
+  // or timed-out connection) or the step timeout fired. That's the network,
+  // not the agent, so the try isn't recorded and the next run redoes it.
+  | { kind: "network"; message: string }
+  // The provider answered, but not usefully (a 400, output it couldn't
+  // parse): the try is recorded as errored and the run goes on.
   | { kind: "try"; message: string };
 
 // Groq says which limit was hit, e.g. "Limit 200000, Used 199500 … on tokens
@@ -32,8 +36,11 @@ function waitHint(error: APICallError): number | null {
 export function classifyFailure(error: unknown, describe: (error: unknown) => string): CallFailure {
   const message = describe(error);
   const cause = RetryError.isInstance(error) ? error.lastError : error;
+  if (cause instanceof Error && cause.name === "TimeoutError") return { kind: "network", message };
   if (!APICallError.isInstance(cause)) return { kind: "try", message };
   const status = cause.statusCode;
+  // The AI SDK gives a call that never reached the provider no status.
+  if (status === undefined) return { kind: "network", message };
   if (status === 429) {
     if (DAILY.test(`${cause.message} ${cause.responseBody ?? ""}`)) return { kind: "daily", message };
     return { kind: "busy", message, waitMs: waitHint(cause), limit: true };

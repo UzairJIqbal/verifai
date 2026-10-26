@@ -367,6 +367,89 @@ describe("runner", () => {
     expect(store.loadTrials("r2")[0].steps[1]).toMatchObject({ type: "model", provider: "cloudflare", cached: true });
   });
 
+  it("drops a try whose call got no answer, mid-conversation too, and redoes it next time", async () => {
+    const store = newStore();
+    const unreachable = () => new APICallError({ message: "Cannot connect to API: getaddrinfo ENOTFOUND api.groq.com", url: "https://example.test", requestBodyValues: {}, isRetryable: true });
+    let n = 0;
+    const notices: string[] = [];
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        n++;
+        // The first try's call gets no answer; the third gets a tool call
+        // answered, then times out on its next step.
+        if (n === 1) throw unreachable();
+        if (n === 3) return { ...reply(""), content: [{ type: "tool-call" as const, toolCallId: "c1", toolName: "get_order", input: JSON.stringify({ order_id: 1005 }) }], finishReason: { unified: "tool-calls" as const, raw: "tool_calls" } };
+        if (n === 4) throw new DOMException("step timeout of 1000ms exceeded", "TimeoutError");
+        return reply("Your order is processing.");
+      },
+    });
+    const first = await run(model, store, "r1", { useCache: false, notices });
+    expect(first.outcome).toMatchObject({ finished: false, reason: "network", message: "2 tries got no answer from the model and weren't saved." });
+    expect(store.loadTrials("r1")).toHaveLength(6);
+    expect(store.loadTrials("r1").some((t) => t.status === "errored")).toBe(false);
+    expect(notices.filter((m) => /got no answer: .* Not saved; carrying on redoes it\./.test(m))).toHaveLength(2);
+
+    const second = await run(model, store, "r1", { useCache: false });
+    expect(second.outcome).toEqual({ finished: true });
+    expect(second.sent).toBe(2);
+    expect(store.loadTrials("r1")).toHaveLength(8);
+  });
+
+  it(`stops after ${STOP_AFTER_ERRORS_IN_A_ROW} tries in a row get no answer, saving none of them`, async () => {
+    const store = newStore();
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        throw new APICallError({ message: "Cannot connect to API: Connect Timeout Error", url: "https://example.test", requestBodyValues: {}, isRetryable: true });
+      },
+    });
+    const { outcome } = await run(model, store, "r1");
+    expect(outcome).toMatchObject({ finished: false, reason: "network" });
+    expect(store.loadTrials("r1")).toHaveLength(0);
+  });
+
+  it("keeps no-answer and errored streaks apart, so a stop names what happened", async () => {
+    const store = newStore();
+    let n = 0;
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        n++;
+        if (n <= 2) throw new APICallError({ message: "Cannot connect to API: getaddrinfo ENOTFOUND api.groq.com", url: "https://example.test", requestBodyValues: {}, isRetryable: true });
+        if (n === 3) throw apiError(500, "internal error");
+        return reply("Your order is processing.");
+      },
+    });
+    const { outcome } = await run(model, store, "r1", { useCache: false });
+    expect(outcome).toMatchObject({ finished: false, reason: "network", message: "2 tries got no answer from the model and weren't saved." });
+    expect(store.loadTrials("r1").filter((t) => t.status === "errored")).toHaveLength(1);
+  });
+
+  it("says Ctrl-C when it was Ctrl-C, even after a try got no answer", async () => {
+    const store = newStore();
+    let n = 0;
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        if (++n === 1) throw new APICallError({ message: "Cannot connect to API: getaddrinfo ENOTFOUND api.groq.com", url: "https://example.test", requestBodyValues: {}, isRetryable: true });
+        return reply("Your order is processing.");
+      },
+    });
+    const { outcome } = await run(model, store, "r1", { useCache: false, stopAfterTries: 2 });
+    expect(outcome).toMatchObject({ finished: false, reason: "interrupted" });
+  });
+
+  it("redoes a dropped try of a finished run once it's reopened", async () => {
+    const store = newStore();
+    const model = new MockLanguageModelV4({ doGenerate: async () => reply("Your order is processing.") });
+    await run(model, store, "r1", { useCache: false });
+    store.finishRun("r1", new Date().toISOString());
+    store.dropTries("r1", [{ taskId: "status-01", tryNumber: 2 }]);
+    expect(store.loadTrials("r1")).toHaveLength(7);
+    store.reopenRun("r1");
+    expect(store.findUnfinishedRun(planFor(false).fingerprint)?.id).toBe("r1");
+    const again = await run(model, store, "r1", { useCache: false });
+    expect(again).toMatchObject({ outcome: { finished: true }, sent: 1 });
+    expect(store.loadTrials("r1").map((t) => `${t.taskId}#${t.tryNumber}`)).toContain("status-01#2");
+  });
+
   it(`stops after ${STOP_AFTER_ERRORS_IN_A_ROW} errored tries in a row`, async () => {
     const store = newStore();
     const model = new MockLanguageModelV4({
