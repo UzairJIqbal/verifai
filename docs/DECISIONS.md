@@ -27,7 +27,7 @@ session picks the work up next.
 model never sees it. 3: nothing makes a session open this file before it starts
 editing.
 
-**Status.** Proposed
+**Status.** Accepted (2026-10-26).
 
 ---
 
@@ -70,3 +70,73 @@ the honest size of what those tasks can show; the fix is more tasks, not a
 tighter number.
 
 **Status.** Accepted (2026-10-25). Merged in PR #3.
+
+---
+
+## D-003 · 2026-10-26 · claude-opus-5-5
+
+**Context.** Every errored try ever recorded is the network, not the agent: a
+model call that got no answer at all (DNS failure on lost Wi-Fi, a connection
+timeout, or Groq not answering within the step timeout). Errored tries were
+saved as done and counted as not passed, so a Wi-Fi drop became a fail the
+agent never made, and it was never redone. The second `pnpm gate v3` run lost 4
+tries this way (status-12 ×3, address-16), and v1's noise run 7220 has one
+(transfer-13, a Groq step timeout). Leaving v1's and dropping v3's would tilt
+the comparison toward v3.
+
+**Options considered.**
+1. A model call that got no answer at all drops the whole try, wherever in the
+   conversation it happened: nothing is saved, so the next run of the same
+   command redoes it. "No answer" means no status came back (DNS, connection
+   refused or reset, connection timeout) or the step timeout fired. Any
+   failure where the provider did answer (a 400, output it couldn't parse) or
+   anything after it answered (a bad tool call) still counts as a fail, as
+   before.
+2. Drop only tries whose first call got no answer.
+3. Delete the 5 known tries by hand, no rule.
+
+**Chosen.** 1. Three no-answer tries in a row still stop the run (most likely
+the connection is down), with a message saying they weren't saved and will be
+redone. A run where any try was dropped doesn't finish; carrying it on redoes
+those tries. It applies to every run from now on, plus two existing runs:
+the unfinished gate run of v3 on dev (its 4 tries) and noise run
+20261023-122611-7220 (transfer-13 try 3). `pnpm redo-no-answer <run>` drops a
+run's no-answer tries from the store; for a finished noise run it also reopens
+it and its measurement, so `pnpm noise` redoes the try (about 5 Groq calls)
+and saves a new noise floor from the pair. The gate takes the newest floor, so
+it uses the new one.
+
+**Not changed.** Two older runs keep their errored tries as they are: noise
+run 0403 (dataset v1, 4 tries) and the broken-tool control aeb7 (dataset v2, 2
+tries). Neither feeds the v3 gate, and rewriting finished history that nothing
+compares against would only change old numbers.
+
+**Rejected.** 2: address-16 and transfer-13 failed mid-conversation, and the
+agent had done nothing wrong in either. 3: the next Wi-Fi drop would need the
+same hand fix.
+
+**Trade-off.** A task whose call always times out would never finish; the run
+stops loudly each time instead of recording a fail. That's visible, not
+silent, and raising `agent.stepTimeoutSeconds` is the fix.
+
+**Status.** Accepted (2026-10-26).
+
+---
+
+## D-004 · 2026-10-26 · claude-opus-5-5
+
+**Context.** When sending traces to Langfuse failed at the end of a command
+(Wi-Fi down), the error escaped `close()`, the eval store was never closed,
+and the gate crashed with an unhandled rejection after its tries were saved.
+
+**Options considered.**
+1. Catch a failed trace flush in `close()`, print a warning that some traces
+   didn't reach Langfuse, and always close the store.
+2. Retry the flush until it works.
+
+**Chosen.** 1. Traces are for looking at; the store and results files are the
+record, and they're already saved. A test covers it.
+
+**Rejected.** 2: with no connection it would hang the command for nothing.
+
+**Status.** Accepted (2026-10-26).

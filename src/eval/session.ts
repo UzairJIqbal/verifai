@@ -225,11 +225,27 @@ export async function openSession(args: { useCache: boolean; smoke: boolean; pla
     configKey: configKey(runConfig),
     useCache,
     smoke,
-    close: async () => {
-      if (tracing.on) await tracing.shutdown();
-      store.close();
-    },
+    close: () => closeSession(tracing, store, (message) => console.warn(styleText("yellow", message))),
   };
+}
+
+/**
+ * Sends the last traces, then closes the store. Traces are for looking at;
+ * the store and the results files are the record, and they're already saved.
+ * So a Langfuse that can't be reached (no Wi-Fi) is a warning, never a crash,
+ * and the store is closed whatever happens.
+ */
+export async function closeSession(tracing: Tracing, store: Pick<EvalStore, "close">, warn: (message: string) => void): Promise<void> {
+  try {
+    if (tracing.on) await tracing.shutdown();
+  } catch (error) {
+    // The exporter rejects with an array of errors, not one.
+    const errors = [error].flat();
+    const said = errors.map((e) => (e instanceof Error ? e.message : String(e))).join("; ");
+    warn(`Some traces didn't reach Langfuse (${said}). The tries themselves are saved.`);
+  } finally {
+    store.close();
+  }
 }
 
 /**
@@ -524,7 +540,7 @@ export async function executeRun(s: Session, args: { title: string; command: str
   if (!outcome.finished) {
     const passed = trials.filter((t) => t.status === "passed").length;
     console.log(styleText(["yellow", "bold"], `\n■ Stopped: ${outcome.message}`));
-    console.log(`  ${trials.length} of ${total} tries done (${passed} passed so far). Nothing is lost; finished tries are saved and never redone.`);
+    console.log(`  ${trials.length} of ${total} tries done (${passed} passed so far). Finished tries are saved and never redone; a try that got no answer wasn't saved, so carrying on redoes it.`);
     console.log(`  To carry on: ${styleText("bold", args.command)}${outcome.reason === "daily" ? " (after the limit resets)" : ""}`);
     if (outcome.reason === "config") console.log("  Fix the problem above first.");
     return { run, finished: false };

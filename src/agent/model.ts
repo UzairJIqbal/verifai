@@ -140,6 +140,12 @@ export function describeModelError(error: unknown, member: PoolMember, stepTimeo
   return `The ${label} call failed: ${cause instanceof Error ? cause.message : String(cause)}`;
 }
 
+// Whether a saved try's error is one of the messages above for a call that
+// got no answer at all: the step timeout, or no status (DNS, a refused, reset
+// or timed-out connection). For tries saved before such tries were dropped
+// unsaved; the runner itself goes by the error, not its wording.
+export const wasNoAnswer = (error: string): boolean => /didn't answer within \d+ seconds|call failed \(no status\)/.test(error);
+
 // A rate limit is worth waiting out; any other failure isn't.
 export function isRateLimited(error: unknown): boolean {
   const cause = RetryError.isInstance(error) ? error.lastError : error;

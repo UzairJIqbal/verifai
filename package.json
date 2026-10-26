@@ -18,6 +18,7 @@
     "noise": "tsx scripts/noise.ts",
     "compare": "tsx scripts/compare.ts",
     "regrade": "tsx scripts/regrade.ts",
+    "redo-no-answer": "tsx scripts/redo-no-answer.ts",
     "claims": "tsx scripts/claims.ts",
     "judge": "tsx scripts/judge.ts",
     "judge:bias": "tsx scripts/judge-bias.ts",

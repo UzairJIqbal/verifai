@@ -287,6 +287,22 @@ export class EvalStore {
     this.db.prepare("UPDATE runs SET status = 'finished', finished_at = ? WHERE id = ?").run(finishedAt, id);
   }
 
+  // Takes a finished run back to unfinished, so carrying it on redoes the
+  // tries dropped from it. Its results files are rewritten when it finishes.
+  reopenRun(id: string): void {
+    this.db.prepare("UPDATE runs SET status = 'running', finished_at = NULL WHERE id = ?").run(id);
+  }
+
+  // Removes tries whole (row, steps, grades), as if they had never run.
+  dropTries(runId: string, tries: { taskId: string; tryNumber: number }[]): void {
+    this.transaction(() => {
+      for (const table of ["steps", "grades", "trials"]) {
+        const drop = this.db.prepare(`DELETE FROM ${table} WHERE run_id = ? AND task_id = ? AND try = ?`);
+        for (const t of tries) drop.run(runId, t.taskId, t.tryNumber);
+      }
+    });
+  }
+
   // "task#try" for every try of the run that has a saved outcome.
   finishedTries(runId: string): Set<string> {
     const rows = z.array(z.object({ task_id: z.string(), try: z.number() })).parse(

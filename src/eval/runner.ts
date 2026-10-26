@@ -27,6 +27,9 @@ export type StopReason =
   | "config"
   // Several tries in a row errored: something is wrong beyond one task.
   | "errors"
+  // Model calls got no answer (the connection, most likely); those tries
+  // weren't saved, and carrying on redoes them.
+  | "network"
   // Ctrl-C.
   | "interrupted";
 
@@ -103,6 +106,10 @@ class StopRun extends Error {
 
 // A model call that failed for this try alone; the message is already plain words.
 class TryFailed extends Error {}
+
+// A model call that got no answer at all: the network, not the agent. The try
+// is dropped unsaved, wherever in the conversation it happened, and redone.
+class NoAnswer extends Error {}
 
 export function costUsd(usage: ModelUsage, prices: RunPrices): number {
   const fresh = usage.inputTokens - usage.cachedInputTokens;
@@ -190,7 +197,9 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
   const halt: { stop: { reason: StopReason; message: string } | null; crash: unknown } = { stop: null, crash: null };
   const stopping = () => halt.stop !== null || halt.crash !== null || o.stopRequested();
   const abandon = () => new StopRun("interrupted", "Stopped before this try finished.");
+  // Errored or unanswered tries in a row, and tries dropped for no answer.
   let errorsInARow = 0;
+  let dropped = 0;
 
   // Shared by every try. A provider whose daily limit is used up is skipped
   // for the rest of this command; one that answered "busy" is skipped until
@@ -250,7 +259,7 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
     return take(ready[0], ticket, guess);
   };
 
-  const runOne = async (task: Task, tryNumber: number): Promise<RecordedTrial> => {
+  const runOne = async (task: Task, tryNumber: number): Promise<RecordedTrial | { noAnswer: string }> => {
     const events: TrajectoryEvent[] = [];
     const startedAt = clock.now();
 
@@ -333,6 +342,7 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
             continue;
           }
           if (failure.kind === "config") throw new StopRun("config", failure.message);
+          if (failure.kind === "network") throw new NoAnswer(failure.message);
           throw new TryFailed(failure.message);
         }
       }
@@ -354,6 +364,7 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
       status = outcomePassed(verdicts) ? "passed" : "failed";
     } catch (caught) {
       if (caught instanceof StopRun) throw caught;
+      if (caught instanceof NoAnswer) return { noAnswer: caught.message };
       status = "errored";
       error = caught instanceof TryFailed ? caught.message : o.describeError(caught);
     }
@@ -367,6 +378,18 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
         if (stopping()) return;
         try {
           const trial = await runOne(task, tryNumber);
+          if ("noAnswer" in trial) {
+            dropped++;
+            errorsInARow++;
+            o.onNotice(`${task.id} try ${tryNumber} got no answer: ${trial.noAnswer} Not saved; carrying on redoes it.`);
+            if (errorsInARow >= STOP_AFTER_ERRORS_IN_A_ROW) {
+              halt.stop ??= {
+                reason: "network",
+                message: `${errorsInARow} tries in a row got no answer from the model. Check the connection. The last one said: ${trial.noAnswer}`,
+              };
+            }
+            return;
+          }
           if (o.tracer) {
             try {
               trial.traceUrl = o.tracer(trial, task);
@@ -402,6 +425,9 @@ export async function runTrials(o: RunnerOptions): Promise<RunOutcome> {
 
   if (halt.crash !== null) throw halt.crash;
   if (halt.stop !== null) return { finished: false, ...halt.stop };
+  if (dropped > 0) {
+    return { finished: false, reason: "network", message: `${dropped} ${dropped === 1 ? "try" : "tries"} got no answer from the model and weren't saved.` };
+  }
   if (progress.done < progress.total) return { finished: false, reason: "interrupted", message: "Stopped by Ctrl-C." };
   return { finished: true };
 }

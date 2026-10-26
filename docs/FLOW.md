@@ -8,7 +8,8 @@ The diagrams are Mermaid. GitHub draws them. In VS Code, open the Markdown
 preview (Cmd+Shift+V) with a Mermaid extension installed, such as
 "Markdown Preview Mermaid Support".
 
-Current task: Phase 11 follow-up, uncommitted on branch `phase-11-gate`.
+Current task: tries with no answer are redone (D-003) and Langfuse can't
+crash a command (D-004), on branch `no-answer-tries`.
 Places it changed are marked **changed** and listed at the end.
 
 ---
@@ -87,7 +88,7 @@ flowchart TD
     E --> F
     F --> G["Run every unfinished try<br/>a few at a time"]
     G --> H{"All tries done?"}
-    H -- "no: daily limit, Ctrl-C, errors" --> I["Stop cleanly<br/>saved tries are kept"]
+    H -- "no: daily limit, Ctrl-C, errors, no answer" --> I["Stop cleanly<br/>saved tries are kept"]
     H -- yes --> J["Write results/run-id/"]
     J --> K["Mark run finished"]
     K --> L["Print the report"]
@@ -116,7 +117,13 @@ try.
 
 #### Stopping or finishing
 If the daily limit runs out, you press Ctrl-C, or too many tries error in a
-row, it stops cleanly. Finished tries stay saved. When every try is done, the
+row, it stops cleanly. Finished tries stay saved. **Changed:** a try where a
+model call got no answer at all (no Wi-Fi, DNS, a connection or step timeout)
+is the network, not the agent, so it isn't saved; the run doesn't finish, and
+carrying it on redoes that try. Three in a row stop the run. A try where the
+model did answer and something then broke is still saved as errored, a fail.
+Closing at the end sends the last traces to Langfuse; **changed:** if that
+fails it prints a warning and still closes the store. When every try is done, the
 run is written to `results/<run>/` and only then marked finished. So if
 writing the files fails, the next `pnpm eval` writes them again.
 
@@ -130,7 +137,8 @@ writing the files fails, the next `pnpm eval` writes them again.
 | Load tasks | src/tasks/load.ts | `loadTasks` |
 | Load agent version | src/agent/versions.ts | `loadAgentVersion` |
 | Start or resume, budget, finish | src/eval/session.ts | `executeRun` |
-| Run the tries | src/eval/runner.ts | `runTrials` |
+| Run the tries **(changed)** | src/eval/runner.ts | `runTrials` |
+| Close (traces, then the store) **(changed)** | src/eval/session.ts | `closeSession` |
 | Write results | src/results/write.ts | `writeResults` |
 
 ---
@@ -193,8 +201,8 @@ the shop) goes to the graders. Many graders report, but only two decide
 pass or fail:
 
 - **state**: did the shop end up changed exactly as the task expects?
-- **reply**: did the agent tell the customer the right facts? **changed:** it
-  now also fails if the agent names another customer's id, or says it
+- **reply**: did the agent tell the customer the right facts? It
+  also fails if the agent names another customer's id, or says it
   transferred the customer when no transfer happened.
 
 The rest (tool choice, arguments, policy rules, efficiency, loops, made-up
@@ -205,13 +213,14 @@ did.
 
 | Step | File | Function |
 |---|---|---|
-| One try | src/eval/runner.ts | `runOne` |
-| Each model call (cache, provider, limits) | src/eval/runner.ts | `wrapCall`, `pick` |
+| One try **(changed)** | src/eval/runner.ts | `runOne` |
+| Each model call (cache, provider, limits) **(changed)** | src/eval/runner.ts | `wrapCall`, `pick` |
+| What a failed call means **(changed)** | src/eval/provider-errors.ts | `classifyFailure` |
 | Conversation | src/eval/conversation.ts | `runTaskConversation` |
 | Agent loop | src/agent/loop.ts | `runAgentTurn` |
 | Tools | src/agent/tools.ts | `runTool` |
 | All graders | src/graders/index.ts | `gradeTry` |
-| Reply outcome **(changed)** | src/graders/index.ts | `gradeReplyOutcome` |
+| Reply outcome | src/graders/index.ts | `gradeReplyOutcome` |
 | Pass or fail | src/graders/index.ts | `outcomePassed` |
 
 ---
@@ -282,7 +291,7 @@ file is put back.
 
 ```mermaid
 flowchart TD
-    A["pnpm task:add"] --> B["addDevTask (changed)"]
+    A["pnpm task:add"] --> B["addDevTask"]
     B --> C["addTasks (new)"]
     C --> D["Run each task's reference calls<br/>on a fresh shop"]
     D --> E{"Changes match<br/>what the task expects?"}
@@ -313,7 +322,7 @@ No script calls `addTasks` directly yet. Only its tests do.
 | Step | File | Function |
 |---|---|---|
 | Entry | scripts/task-add.ts | `main` |
-| Add one dev task **(changed)** | src/tasks/load.ts | `addDevTask` |
+| Add one dev task | src/tasks/load.ts | `addDevTask` |
 | Add several **(new)** | src/tasks/load.ts | `addTasks` |
 | Run reference calls | src/eval/conversation.ts | `runReference` |
 
@@ -346,8 +355,10 @@ they work only on your machine and are hidden when deployed.
 ## 7. Other commands (not mapped yet)
 
 `pnpm noise`, `compare`, `regrade`, `claims`, `judge`, `judge:bias`,
-`agreement`, `taxonomy`, `tasks:freeze`, `task:new`, `exemplars:add`, `seed`
-and `chat` each have one script in `scripts/`. They'll get a section when a
+`agreement`, `taxonomy`, `tasks:freeze`, `task:new`, `exemplars:add`, `seed`,
+`chat` and `redo-no-answer` (new: drops a run's tries saved before D-003 for
+a call with no answer, and reopens a finished noise run for `pnpm noise`)
+each have one script in `scripts/`. They'll get a section when a
 task touches them.
 
 ---
@@ -356,12 +367,11 @@ task touches them.
 
 | Where | What |
 |---|---|
-| src/graders/index.ts:23 | `gradeReplyOutcome` (new): reply also fails on a leaked customer id or a false transfer |
-| src/graders/policy.ts:68 | `otherCustomerNamed` (new) |
-| src/graders/policy.ts:82 | `identifyFirst`: fails on a leaked customer id |
-| src/graders/policy.ts:253 | `ESCALATED`: transfer wordings added |
-| src/graders/policy.ts:271 | `falseEscalation` (new) |
-| src/graders/policy.ts:287 | `promises` (new): skips questions, negations and repeats of the ask |
-| src/graders/policy.ts:290 | `noFalsePromises`: uses `falseEscalation` and `promises` |
-| src/tasks/load.ts:186 | `addDevTask`: now calls `addTasks` |
-| src/tasks/load.ts:198 | `addTasks` (new) |
+| src/eval/provider-errors.ts:36 | `classifyFailure`: new kind "network" for no status or the step timeout |
+| src/eval/runner.ts:112 | `NoAnswer` (new) |
+| src/eval/runner.ts:262 | `runOne`: returns a no-answer marker instead of an errored try |
+| src/eval/runner.ts:381 | `runTrials`: doesn't save a no-answer try; stops after 3 in a row; a run with one doesn't finish |
+| src/eval/session.ts:238 | `closeSession` (new): a failed trace flush is a warning; the store always closes |
+| src/eval/store.ts:292 | `reopenRun`, `dropTries` (new) |
+| src/agent/model.ts:147 | `wasNoAnswer` (new): spots a saved no-answer try by its message |
+| scripts/redo-no-answer.ts | `pnpm redo-no-answer <run>` (new) |

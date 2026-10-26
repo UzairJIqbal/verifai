@@ -2,6 +2,7 @@ import { PassThrough } from "node:stream";
 import { APICallError } from "ai";
 import { describe, expect, it } from "vitest";
 import { loadConfig } from "../config";
+import { describeModelError, wasNoAnswer } from "../agent/model";
 import { loadAgentVersion } from "../agent/versions";
 import { taskSchema } from "../tasks/schema";
 import { dailyLimitReached, dayStart, estimateBudget } from "./budget";
@@ -11,7 +12,7 @@ import { buildRunConfig, firstRequest, newRunId, runFingerprint } from "./plan";
 import { busyWaitMs, classifyFailure } from "./provider-errors";
 import { makeRedactor, REDACTED } from "./redact";
 import { costUsd } from "./runner";
-import { ask, countRemaining } from "./session";
+import { ask, closeSession, countRemaining } from "./session";
 import { EvalStore, tryKey } from "./store";
 
 const config = loadConfig();
@@ -157,6 +158,23 @@ describe("provider errors", () => {
     expect(classifyFailure(err(404, "no model"), describe_).kind).toBe("config");
     expect(classifyFailure(err(500, "oops"), describe_).kind).toBe("try");
     expect(classifyFailure(new Error("socket hang up"), describe_).kind).toBe("try");
+  });
+
+  it("calls a call with no answer the network: no status, or the step timeout", () => {
+    const unreachable = new APICallError({ message: "Cannot connect to API: getaddrinfo ENOTFOUND api.groq.com", url: "u", requestBodyValues: {}, isRetryable: true });
+    expect(classifyFailure(unreachable, describe_).kind).toBe("network");
+    expect(classifyFailure(new DOMException("step timeout of 60000ms exceeded", "TimeoutError"), describe_).kind).toBe("network");
+    // An answer, however bad, is the provider's: still the try's failure.
+    expect(classifyFailure(err(400, "tool call validation failed"), describe_).kind).toBe("try");
+  });
+
+  it("recognises a saved no-answer try by the message it was saved with", () => {
+    const member = config.agent.pool[0];
+    const unreachable = new APICallError({ message: "Cannot connect to API: getaddrinfo ENOTFOUND api.groq.com", url: "u", requestBodyValues: {}, isRetryable: true });
+    expect(wasNoAnswer(describeModelError(unreachable, member, 60))).toBe(true);
+    expect(wasNoAnswer(describeModelError(new DOMException("x", "TimeoutError"), member, 60))).toBe(true);
+    expect(wasNoAnswer(describeModelError(err(500, "internal error"), member, 60))).toBe(false);
+    expect(wasNoAnswer(describeModelError(err(400, "bad request"), member, 60))).toBe(false);
   });
 
   it("waits the provider's hint plus a second, else backs off, never past 90s", () => {
@@ -311,5 +329,27 @@ describe("asking before spending", () => {
   it("takes Ctrl+D as no instead of crashing", async () => {
     expect(await answer(null, true)).toBe(false);
     expect(await answer(null)).toBe(false);
+  });
+});
+
+describe("closing a session", () => {
+  it("warns when traces can't reach Langfuse, and still closes the store", async () => {
+    let closed = false;
+    const warnings: string[] = [];
+    // The exporter rejects with an array of errors, as it did with no Wi-Fi.
+    const tracing = { on: true as const, tracerFor: () => () => null, shutdown: () => Promise.reject([new Error("getaddrinfo ENOTFOUND cloud.langfuse.com")]) };
+    await expect(closeSession(tracing, { close: () => void (closed = true) }, (m) => warnings.push(m))).resolves.toBeUndefined();
+    expect(closed).toBe(true);
+    expect(warnings).toEqual([expect.stringMatching(/didn't reach Langfuse \(getaddrinfo ENOTFOUND cloud\.langfuse\.com\)/)]);
+  });
+
+  it("closes the store quietly when tracing is off or flushes fine", async () => {
+    let closes = 0;
+    const warnings: string[] = [];
+    const store = { close: () => void closes++ };
+    await closeSession({ on: false, reason: "off" }, store, (m) => warnings.push(m));
+    await closeSession({ on: true, tracerFor: () => () => null, shutdown: async () => {} }, store, (m) => warnings.push(m));
+    expect(closes).toBe(2);
+    expect(warnings).toEqual([]);
   });
 });
