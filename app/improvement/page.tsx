@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { ImprovementChart, PAGE_PALETTE, usd } from "@/components/improvement/improvement-chart";
 import { EmptyState, PageHeading } from "@/components/shell/empty-state";
@@ -7,6 +8,8 @@ import { loadImprovement } from "@/src/improvement/load";
 import type { Improvement, Measured, Sample, VersionPoint } from "@/src/improvement/series";
 import { trialKey } from "@/src/review/schema";
 import { interval, pct, sampleSize } from "@/src/stats/format";
+
+export const metadata: Metadata = { title: "Improvement" };
 
 const cell = "px-3 py-1.5 align-top";
 const num = `${cell} text-right tabular-nums`;

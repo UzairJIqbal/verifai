@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { EmptyState, PageHeading } from "@/components/shell/empty-state";
 import { LoadError } from "@/components/runs/load-error";
 import { formatWhen } from "@/components/runs/format";
@@ -6,6 +7,8 @@ import { RATE_LABELS, RateCell, rateText } from "@/components/online/rate";
 import { RateChart } from "@/components/online/rates-chart";
 import { listBatches, type BatchListing } from "@/src/online/files";
 import { ONLINE_RATES, type Batch } from "@/src/online/schema";
+
+export const metadata: Metadata = { title: "Online" };
 
 const cell = "px-3 py-1.5 align-top";
 const num = `${cell} text-right tabular-nums`;

@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { PageHeading } from "@/components/shell/empty-state";
 import { LoadError } from "@/components/runs/load-error";
 import { formatWhen, STATUS_CLASS } from "@/components/runs/format";
@@ -8,6 +9,12 @@ import { RATE_LABELS, RateCell } from "@/components/online/rate";
 import { readBatch, type BatchFiles } from "@/src/online/files";
 import { ONLINE_RATES } from "@/src/online/schema";
 import { conversationStatus } from "@/src/online/trial";
+
+// From the address alone: the tab says which batch before its files are read.
+export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
+  const { batchId } = await params;
+  return { title: `Batch ${batchId}` };
+}
 
 const cell = "px-3 py-1.5 align-top";
 const num = `${cell} text-right tabular-nums`;

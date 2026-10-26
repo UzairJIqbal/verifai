@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 import { PageHeading } from "@/components/shell/empty-state";
 import { LoadError } from "@/components/runs/load-error";
 import { countedTokens, formatCount, STATUS_CLASS } from "@/components/runs/format";
@@ -9,6 +10,11 @@ import { VerdictSummary } from "@/components/runs/verdicts";
 import { readBatch, type BatchFiles } from "@/src/online/files";
 import type { Conversation } from "@/src/online/schema";
 import { conversationStatus, conversationTrial } from "@/src/online/trial";
+
+export async function generateMetadata({ params }: { params: Promise<Params> }): Promise<Metadata> {
+  const { batchId, number } = await params;
+  return { title: `Conversation ${number} · ${batchId}` };
+}
 
 type Params = { batchId: string; number: string };
 
