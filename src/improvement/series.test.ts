@@ -86,7 +86,7 @@ function runData(id: string, split: "dev" | "holdout", recorded: RecordedTrial[]
   return { report: buildReport(run, trials, "2026-10-15T11:00:00.000Z", tasks), trials: split === "holdout" ? null : trials };
 }
 
-const comparison = gateComparison(compareRuns([], [], null));
+const comparison = gateComparison(compareRuns([], [], null), {});
 const gate = (o: Partial<GateRecord> & Pick<GateRecord, "name" | "basedOn" | "decidedAt" | "runs">): GateRecord => ({
   passed: true,
   promoted: true,
