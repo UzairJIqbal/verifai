@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { PROJECT_ROOT } from "../config";
 import { TOOL_NAMES, type PreCheck, type ToolName } from "./tools";
-import { VALIDATIONS, type ValidationName } from "./validation";
+import { VALIDATION_NAMES, VALIDATIONS, type ValidationName } from "./validation";
 
 const AGENT_DIR = join(PROJECT_ROOT, "agent");
 
@@ -92,6 +92,16 @@ export function loadAgentVersion(knobs: AgentKnobs, today: string): AgentVersion
 // The version's validation step, in the form the tool runner takes.
 export function preCheckOf(version: Pick<AgentVersion, "validation">): PreCheck | null {
   return version.validation === null ? null : VALIDATIONS[version.validation];
+}
+
+// A saved run's validation step, by the name its file recorded. A name this
+// code doesn't have fails loudly: replaying without it would grade a run that
+// never happened.
+export function preCheckNamed(name: string | null): PreCheck | null {
+  if (name === null) return null;
+  const known = VALIDATION_NAMES.find((n) => n === name);
+  if (known === undefined) throw new Error(`The run used validation step "${name}", which this code doesn't have, so it can't be replayed.`);
+  return VALIDATIONS[known];
 }
 
 export function loadToolDescriptions(version: string): ToolDescriptions {

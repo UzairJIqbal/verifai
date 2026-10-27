@@ -4,8 +4,8 @@
 // a committed results folder, so a fresh clone can check a committed number
 // with no key and no call.
 import { canonical } from "../canonical";
-import { loadToolDescriptions, offeredTools } from "../agent/versions";
-import { runTool, type ToolName } from "../agent/tools";
+import { loadToolDescriptions, offeredTools, preCheckNamed } from "../agent/versions";
+import { runTool, type PreCheck, type ToolName } from "../agent/tools";
 import { gradeTry, outcomePassed } from "../graders";
 import { loadShopFacts } from "../graders/shop-facts";
 import { gradedSections } from "../results/write";
@@ -23,7 +23,7 @@ const toEvent = (s: Step): TrajectoryEvent => s;
 // Tools are deterministic over the seed and the frozen date, so a different
 // outcome means the shop or a tool changed since the run, and its grades
 // would be about something that never happened.
-export function replayTrial(trial: RecordedTrial, offered: readonly ToolName[], seedPath: string = SEED_DB_PATH): Trajectory {
+export function replayTrial(trial: RecordedTrial, offered: readonly ToolName[], preCheck: PreCheck | null, seedPath: string = SEED_DB_PATH): Trajectory {
   const shop = openFreshShop(seedPath);
   try {
     const ctx = { db: shop.db, today: getShopToday(shop.db) };
@@ -33,7 +33,7 @@ export function replayTrial(trial: RecordedTrial, offered: readonly ToolName[], 
       if (s.type !== "tool-result") continue;
       const call = calls.get(s.toolCallId);
       if (!call) throw new Error(`${trial.taskId} try ${trial.tryNumber}: a ${s.toolName} result has no call.`);
-      const outcome = runTool(ctx, call.toolName, call.input, offered);
+      const outcome = runTool(ctx, call.toolName, call.input, offered, preCheck);
       if (canonical(outcome) !== canonical(s.outcome)) {
         throw new Error(
           `${trial.taskId} try ${trial.tryNumber}: replaying ${call.toolName} ${canonical(call.input)} gave ${canonical(outcome)}, but the run recorded ${canonical(s.outcome)}. ` +
@@ -72,9 +72,10 @@ export function replayRunFiles(files: RunFiles, loaded: LoadedTasks, args: { pol
   const tasksById = new Map(loaded.tasks.map((t) => [t.id, t]));
   const seedPath = args.seedPath ?? SEED_DB_PATH;
   const shop = loadShopFacts(seedPath);
-  // Replayed with the tools the run's agent had, so a call to one its version
-  // left out fails again, as it did in the run.
+  // Replayed with the tools and validation step the run's agent had, so a call
+  // its version left out or refused fails again, as it did in the run.
   const offered = offeredTools(loadToolDescriptions(report.agent.toolDescriptionsVersion));
+  const preCheck = preCheckNamed(report.agent.validation);
 
   const differences: ReplayDifference[] = [];
   const trials: Trial[] = files.trials.map((trial) => {
@@ -85,7 +86,7 @@ export function replayRunFiles(files: RunFiles, loaded: LoadedTasks, args: { pol
     }
     // An errored try never finished, so there's nothing to grade.
     if (trial.status === "errored") return trial;
-    const verdicts = gradeTry(task, replayTrial(trial, offered, seedPath), shop, args.policy).map((v) => verdictSchema.parse(v));
+    const verdicts = gradeTry(task, replayTrial(trial, offered, preCheck, seedPath), shop, args.policy).map((v) => verdictSchema.parse(v));
     const replayed: Trial = { ...trial, status: outcomePassed(verdicts) ? "passed" : "failed", verdicts };
     if (gist(replayed) !== gist(trial)) differences.push({ taskId: trial.taskId, tryNumber: trial.tryNumber, recorded: gist(trial), replayed: gist(replayed) });
     return replayed;

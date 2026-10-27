@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { loadConfig } from "../config";
-import { loadAgentVersion, loadPolicy } from "../agent/versions";
+import { loadAgentVersion, loadPolicy, preCheckOf } from "../agent/versions";
 import { runTool, TOOL_NAMES } from "../agent/tools";
 import { CANCEL_REFERENCE, taskWith, testShop } from "../graders/fixtures";
 import type { RunFiles } from "../results/read";
@@ -72,7 +72,7 @@ function filesWith(trial: Partial<Trial>, report: { split?: "dev" | "holdout"; s
 // The verdicts today's graders give the file's one try.
 function gradedVerdicts(files: RunFiles): Trial["verdicts"] {
   if (files.sealed) throw new Error("A test run is never sealed.");
-  return gradeTry(task, replayTrial(files.trials[0], TOOL_NAMES, seedPath), loadShopFacts(seedPath), policy).map((v) => verdictSchema.parse(v));
+  return gradeTry(task, replayTrial(files.trials[0], TOOL_NAMES, null, seedPath), loadShopFacts(seedPath), policy).map((v) => verdictSchema.parse(v));
 }
 
 describe("replaying a committed run", () => {
@@ -97,6 +97,22 @@ describe("replaying a committed run", () => {
     const steps = files.trials[0].steps.map((s) => (s.type === "tool-result" && s.toolName === "cancel_order" ? { ...s, outcome: { ok: false as const, error: "made up" } } : s));
     const changed: RunFiles = { ...files, trials: [{ ...files.trials[0], steps }] };
     expect(() => replayRunFiles(changed, loaded, { policy, seedPath })).toThrow(/The shop or a tool has changed/);
+  });
+
+  it("replays a call the run's validation step refused as refused again", () => {
+    const refundLimit = preCheckOf({ validation: "refund-limit" });
+    if (refundLimit === null) throw new Error("refund-limit has no pre-check.");
+    const input = { order_id: 1005, amount: 20000, reason: "Faulty" };
+    const refused = refundLimit.check(input);
+    if (refused === null) throw new Error("The refund limit let Rs 20,000 through.");
+    const steps: Step[] = [
+      { type: "customer", text: task.first_message },
+      { type: "tool-call", step: 0, toolCallId: "call-0", toolName: "refund_order", input },
+      { type: "tool-result", step: 0, toolCallId: "call-0", toolName: "refund_order", outcome: refused, startedAt: 0, latencyMs: 0 },
+    ];
+    const trial = { ...filesWith({}).trials[0], steps };
+    expect(replayTrial(trial, TOOL_NAMES, refundLimit, seedPath).changes).toEqual(replayTrial({ ...trial, steps: [] }, TOOL_NAMES, null, seedPath).changes);
+    expect(() => replayTrial(trial, TOOL_NAMES, null, seedPath)).toThrow(/The shop or a tool has changed/);
   });
 
   it("never replays a holdout run, a smoke run, or a run on another dataset version", () => {
