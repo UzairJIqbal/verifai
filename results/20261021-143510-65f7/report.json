@@ -834,7 +834,79 @@
         "hi": 0.026785714285714284
       }
     },
-    "claims": null
+    "claims": {
+      "judges": [
+        "gemini-3.5-flash-lite · claims v1"
+      ],
+      "checkable": 224,
+      "checked": 224,
+      "ungraded": 0,
+      "responses": {
+        "tasks": 56,
+        "tries": 224,
+        "replies": 534,
+        "flagged": 52,
+        "rate": {
+          "value": 0.09737827715355805,
+          "lo": 0.057692307692307696,
+          "hi": 0.14453125
+        }
+      },
+      "claims": {
+        "tasks": 56,
+        "tries": 224,
+        "total": 824,
+        "unsupported": 47,
+        "contradicted": 13,
+        "rate": {
+          "value": 0.05703883495145631,
+          "lo": 0.03009172286448298,
+          "hi": 0.09159633856549834
+        }
+      }
+    }
   },
-  "judge": null
+  "judge": {
+    "judges": [
+      "gemini-3.5-flash-lite · rubric v1 · 9fa202"
+    ],
+    "judgeable": 224,
+    "judged": 81,
+    "ungraded": 0,
+    "criteria": [
+      {
+        "criterion": "refusal-explained",
+        "tasks": 6,
+        "tries": 23,
+        "passed": 23,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "criterion": "answered-question",
+        "tasks": 21,
+        "tries": 81,
+        "passed": 79,
+        "rate": {
+          "value": 0.9761904761904762,
+          "lo": 0.9404761904761905,
+          "hi": 1
+        }
+      },
+      {
+        "criterion": "tone",
+        "tasks": 21,
+        "tries": 81,
+        "passed": 74,
+        "rate": {
+          "value": 0.9166666666666666,
+          "lo": 0.8571428571428571,
+          "hi": 0.9761904761904762
+        }
+      }
+    ]
+  }
 }

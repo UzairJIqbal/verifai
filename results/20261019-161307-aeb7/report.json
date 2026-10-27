@@ -1,0 +1,836 @@
+{
+  "runId": "20261019-161307-aeb7",
+  "createdAt": "2026-10-19T16:13:07.874Z",
+  "finishedAt": "2026-10-20T19:42:10.709Z",
+  "split": "dev",
+  "smoke": false,
+  "datasetVersion": "v2",
+  "taskCount": 35,
+  "triesPerTask": 4,
+  "useCache": true,
+  "configKey": "f9bcc2ca368c85e3",
+  "agent": {
+    "pool": [
+      "groq",
+      "cloudflare"
+    ],
+    "model": "openai/gpt-oss-120b",
+    "temperature": 0,
+    "maxSteps": 12,
+    "reasoningEffort": "low",
+    "promptVersion": "v1",
+    "toolDescriptionsVersion": "v3",
+    "validation": null,
+    "exemplars": false
+  },
+  "promotedAs": null,
+  "totals": {
+    "trials": 140,
+    "passed": 111,
+    "failed": 27,
+    "errored": 2,
+    "calls": 632,
+    "cachedCalls": 11,
+    "callsByProvider": {
+      "groq": 456,
+      "cloudflare": 176
+    },
+    "usage": {
+      "inputTokens": 779718,
+      "cachedInputTokens": 371200,
+      "outputTokens": 34559
+    },
+    "costUsd": 0.14618370000000003
+  },
+  "stats": {
+    "overall": {
+      "tasks": 35,
+      "tries": 140,
+      "passed": 111,
+      "passHat": [
+        {
+          "value": 0.7928571428571428,
+          "lo": 0.6571428571428571,
+          "hi": 0.9142857142857143
+        },
+        {
+          "value": 0.7761904761904762,
+          "lo": 0.6333333333333333,
+          "hi": 0.9142857142857143
+        },
+        {
+          "value": 0.7714285714285715,
+          "lo": 0.6285714285714286,
+          "hi": 0.9142857142857143
+        },
+        {
+          "value": 0.7714285714285715,
+          "lo": 0.6285714285714286,
+          "hi": 0.9142857142857143
+        }
+      ],
+      "passAt": [
+        {
+          "value": 0.7928571428571428,
+          "lo": 0.6571428571428571,
+          "hi": 0.9142857142857143
+        },
+        {
+          "value": 0.8095238095238095,
+          "lo": 0.6760714285714287,
+          "hi": 0.9238095238095236
+        },
+        {
+          "value": 0.8214285714285714,
+          "lo": 0.6857142857142857,
+          "hi": 0.9357142857142857
+        },
+        {
+          "value": 0.8285714285714286,
+          "lo": 0.6857142857142857,
+          "hi": 0.9428571428571428
+        }
+      ]
+    },
+    "byCategory": {
+      "cancel": {
+        "tasks": 7,
+        "tries": 28,
+        "passed": 12,
+        "passHat": [
+          {
+            "value": 0.42857142857142855,
+            "lo": 0.14285714285714285,
+            "hi": 0.8571428571428571
+          },
+          {
+            "value": 0.42857142857142855,
+            "lo": 0.14285714285714285,
+            "hi": 0.8571428571428571
+          },
+          {
+            "value": 0.42857142857142855,
+            "lo": 0.14285714285714285,
+            "hi": 0.8571428571428571
+          },
+          {
+            "value": 0.42857142857142855,
+            "lo": 0.14285714285714285,
+            "hi": 0.8571428571428571
+          }
+        ],
+        "passAt": [
+          {
+            "value": 0.42857142857142855,
+            "lo": 0.14285714285714285,
+            "hi": 0.8571428571428571
+          },
+          {
+            "value": 0.42857142857142855,
+            "lo": 0.14285714285714285,
+            "hi": 0.8571428571428571
+          },
+          {
+            "value": 0.42857142857142855,
+            "lo": 0.14285714285714285,
+            "hi": 0.8571428571428571
+          },
+          {
+            "value": 0.42857142857142855,
+            "lo": 0.14285714285714285,
+            "hi": 0.8571428571428571
+          }
+        ]
+      },
+      "refund": {
+        "tasks": 7,
+        "tries": 28,
+        "passed": 21,
+        "passHat": [
+          {
+            "value": 0.75,
+            "lo": 0.42857142857142855,
+            "hi": 1
+          },
+          {
+            "value": 0.7142857142857143,
+            "lo": 0.42857142857142855,
+            "hi": 1
+          },
+          {
+            "value": 0.7142857142857143,
+            "lo": 0.42857142857142855,
+            "hi": 1
+          },
+          {
+            "value": 0.7142857142857143,
+            "lo": 0.42857142857142855,
+            "hi": 1
+          }
+        ],
+        "passAt": [
+          {
+            "value": 0.75,
+            "lo": 0.42857142857142855,
+            "hi": 1
+          },
+          {
+            "value": 0.7857142857142857,
+            "lo": 0.5,
+            "hi": 1
+          },
+          {
+            "value": 0.8214285714285714,
+            "lo": 0.5357142857142857,
+            "hi": 1
+          },
+          {
+            "value": 0.8571428571428571,
+            "lo": 0.5714285714285714,
+            "hi": 1
+          }
+        ]
+      },
+      "address": {
+        "tasks": 7,
+        "tries": 28,
+        "passed": 28,
+        "passHat": [
+          {
+            "value": 1,
+            "lo": 1,
+            "hi": 1
+          },
+          {
+            "value": 1,
+            "lo": 1,
+            "hi": 1
+          },
+          {
+            "value": 1,
+            "lo": 1,
+            "hi": 1
+          },
+          {
+            "value": 1,
+            "lo": 1,
+            "hi": 1
+          }
+        ],
+        "passAt": [
+          {
+            "value": 1,
+            "lo": 1,
+            "hi": 1
+          },
+          {
+            "value": 1,
+            "lo": 1,
+            "hi": 1
+          },
+          {
+            "value": 1,
+            "lo": 1,
+            "hi": 1
+          },
+          {
+            "value": 1,
+            "lo": 1,
+            "hi": 1
+          }
+        ]
+      },
+      "status": {
+        "tasks": 7,
+        "tries": 28,
+        "passed": 28,
+        "passHat": [
+          {
+            "value": 1,
+            "lo": 1,
+            "hi": 1
+          },
+          {
+            "value": 1,
+            "lo": 1,
+            "hi": 1
+          },
+          {
+            "value": 1,
+            "lo": 1,
+            "hi": 1
+          },
+          {
+            "value": 1,
+            "lo": 1,
+            "hi": 1
+          }
+        ],
+        "passAt": [
+          {
+            "value": 1,
+            "lo": 1,
+            "hi": 1
+          },
+          {
+            "value": 1,
+            "lo": 1,
+            "hi": 1
+          },
+          {
+            "value": 1,
+            "lo": 1,
+            "hi": 1
+          },
+          {
+            "value": 1,
+            "lo": 1,
+            "hi": 1
+          }
+        ]
+      },
+      "transfer": {
+        "tasks": 7,
+        "tries": 28,
+        "passed": 22,
+        "passHat": [
+          {
+            "value": 0.7857142857142857,
+            "lo": 0.5,
+            "hi": 1
+          },
+          {
+            "value": 0.738095238095238,
+            "lo": 0.42857142857142855,
+            "hi": 1
+          },
+          {
+            "value": 0.7142857142857143,
+            "lo": 0.42857142857142855,
+            "hi": 1
+          },
+          {
+            "value": 0.7142857142857143,
+            "lo": 0.42857142857142855,
+            "hi": 1
+          }
+        ],
+        "passAt": [
+          {
+            "value": 0.7857142857142857,
+            "lo": 0.5,
+            "hi": 1
+          },
+          {
+            "value": 0.8333333333333334,
+            "lo": 0.5476190476190477,
+            "hi": 1
+          },
+          {
+            "value": 0.8571428571428571,
+            "lo": 0.5714285714285714,
+            "hi": 1
+          },
+          {
+            "value": 0.8571428571428571,
+            "lo": 0.5714285714285714,
+            "hi": 1
+          }
+        ]
+      }
+    },
+    "byDifficulty": {
+      "easy": {
+        "tasks": 21,
+        "tries": 84,
+        "passed": 68,
+        "passHat": [
+          {
+            "value": 0.8095238095238095,
+            "lo": 0.6190476190476191,
+            "hi": 0.9523809523809523
+          },
+          {
+            "value": 0.8095238095238095,
+            "lo": 0.6190476190476191,
+            "hi": 0.9523809523809523
+          },
+          {
+            "value": 0.8095238095238095,
+            "lo": 0.6190476190476191,
+            "hi": 0.9523809523809523
+          },
+          {
+            "value": 0.8095238095238095,
+            "lo": 0.6190476190476191,
+            "hi": 0.9523809523809523
+          }
+        ],
+        "passAt": [
+          {
+            "value": 0.8095238095238095,
+            "lo": 0.6190476190476191,
+            "hi": 0.9523809523809523
+          },
+          {
+            "value": 0.8095238095238095,
+            "lo": 0.6190476190476191,
+            "hi": 0.9523809523809523
+          },
+          {
+            "value": 0.8095238095238095,
+            "lo": 0.6190476190476191,
+            "hi": 0.9523809523809523
+          },
+          {
+            "value": 0.8095238095238095,
+            "lo": 0.6190476190476191,
+            "hi": 0.9523809523809523
+          }
+        ]
+      },
+      "hard": {
+        "tasks": 14,
+        "tries": 56,
+        "passed": 43,
+        "passHat": [
+          {
+            "value": 0.7678571428571429,
+            "lo": 0.5535714285714286,
+            "hi": 0.9464285714285714
+          },
+          {
+            "value": 0.7261904761904762,
+            "lo": 0.5,
+            "hi": 0.9285714285714286
+          },
+          {
+            "value": 0.7142857142857143,
+            "lo": 0.5,
+            "hi": 0.9285714285714286
+          },
+          {
+            "value": 0.7142857142857143,
+            "lo": 0.5,
+            "hi": 0.9285714285714286
+          }
+        ],
+        "passAt": [
+          {
+            "value": 0.7678571428571429,
+            "lo": 0.5535714285714286,
+            "hi": 0.9464285714285714
+          },
+          {
+            "value": 0.8095238095238095,
+            "lo": 0.6071428571428571,
+            "hi": 0.9761904761904763
+          },
+          {
+            "value": 0.8392857142857143,
+            "lo": 0.6428571428571429,
+            "hi": 1
+          },
+          {
+            "value": 0.8571428571428571,
+            "lo": 0.6428571428571429,
+            "hi": 1
+          }
+        ]
+      }
+    }
+  },
+  "graders": {
+    "tasks": 35,
+    "tries": 138,
+    "errored": 2,
+    "graders": [
+      {
+        "grader": "state",
+        "tasks": 35,
+        "tries": 138,
+        "graded": 138,
+        "passed": 113,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.8071428571428572,
+          "lo": 0.6714285714285714,
+          "hi": 0.9214285714285714
+        }
+      },
+      {
+        "grader": "reply",
+        "tasks": 35,
+        "tries": 138,
+        "graded": 138,
+        "passed": 132,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.9571428571428572,
+          "lo": 0.8857142857142857,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "tool-choice",
+        "tasks": 35,
+        "tries": 138,
+        "graded": 138,
+        "passed": 117,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.8357142857142857,
+          "lo": 0.7,
+          "hi": 0.9428571428571428
+        }
+      },
+      {
+        "grader": "arguments",
+        "tasks": 35,
+        "tries": 138,
+        "graded": 138,
+        "passed": 138,
+        "ungraded": 0,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "policy:identify-first",
+        "tasks": 35,
+        "tries": 138,
+        "graded": 138,
+        "passed": 138,
+        "ungraded": 0,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "policy:look-up-first",
+        "tasks": 35,
+        "tries": 138,
+        "graded": 138,
+        "passed": 126,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.9142857142857143,
+          "lo": 0.8,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "policy:cancel-only-processing",
+        "tasks": 35,
+        "tries": 138,
+        "graded": 138,
+        "passed": 138,
+        "ungraded": 0,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "policy:address-only-processing",
+        "tasks": 35,
+        "tries": 138,
+        "graded": 138,
+        "passed": 138,
+        "ungraded": 0,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "policy:refund-rules",
+        "tasks": 35,
+        "tries": 138,
+        "graded": 138,
+        "passed": 138,
+        "ungraded": 0,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "policy:large-refund-to-human",
+        "tasks": 35,
+        "tries": 138,
+        "graded": 138,
+        "passed": 131,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.95,
+          "lo": 0.8714285714285714,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "policy:confirm-first",
+        "tasks": 35,
+        "tries": 138,
+        "graded": 138,
+        "passed": 134,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.9714285714285714,
+          "lo": 0.9142857142857143,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "policy:no-false-promises",
+        "tasks": 35,
+        "tries": 138,
+        "graded": 138,
+        "passed": 137,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.9928571428571429,
+          "lo": 0.9785714285714285,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "efficiency",
+        "tasks": 35,
+        "tries": 138,
+        "graded": 138,
+        "passed": 138,
+        "ungraded": 0,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "loop",
+        "tasks": 35,
+        "tries": 138,
+        "graded": 138,
+        "passed": 138,
+        "ungraded": 0,
+        "rate": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "fabricated-entity",
+        "tasks": 35,
+        "tries": 138,
+        "graded": 138,
+        "passed": 134,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.9714285714285714,
+          "lo": 0.9142857142857143,
+          "hi": 1
+        }
+      },
+      {
+        "grader": "fabricated-action",
+        "tasks": 35,
+        "tries": 138,
+        "graded": 138,
+        "passed": 137,
+        "ungraded": 0,
+        "rate": {
+          "value": 0.9928571428571429,
+          "lo": 0.9785714285714285,
+          "hi": 1
+        }
+      }
+    ],
+    "policy": {
+      "tasks": 35,
+      "tries": 138,
+      "violated": 24,
+      "rate": {
+        "value": 0.17142857142857143,
+        "lo": 0.05714285714285714,
+        "hi": 0.3
+      }
+    },
+    "tools": [
+      {
+        "tool": "find_customer_by_email",
+        "tasks": 35,
+        "tries": 138,
+        "called": 133,
+        "expected": 138,
+        "both": 133,
+        "precision": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        },
+        "recall": {
+          "value": 0.9637681159420289,
+          "lo": 0.8985507246376812,
+          "hi": 1
+        }
+      },
+      {
+        "tool": "list_customer_orders",
+        "tasks": 35,
+        "tries": 138,
+        "called": 20,
+        "expected": 18,
+        "both": 18,
+        "precision": {
+          "value": 0.9,
+          "lo": 0.6666666666666666,
+          "hi": 1
+        },
+        "recall": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "tool": "get_order",
+        "tasks": 35,
+        "tries": 138,
+        "called": 111,
+        "expected": 122,
+        "both": 107,
+        "precision": {
+          "value": 0.963963963963964,
+          "lo": 0.8846153846153846,
+          "hi": 1
+        },
+        "recall": {
+          "value": 0.8770491803278688,
+          "lo": 0.7540983606557377,
+          "hi": 0.9705882352941176
+        }
+      },
+      {
+        "tool": "update_order_address",
+        "tasks": 35,
+        "tries": 138,
+        "called": 24,
+        "expected": 24,
+        "both": 24,
+        "precision": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        },
+        "recall": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "tool": "cancel_order",
+        "tasks": 35,
+        "tries": 138,
+        "called": 0,
+        "expected": 14,
+        "both": 0,
+        "precision": null,
+        "recall": {
+          "value": 0,
+          "lo": 0,
+          "hi": 0
+        }
+      },
+      {
+        "tool": "refund_order",
+        "tasks": 35,
+        "tries": 138,
+        "called": 31,
+        "expected": 24,
+        "both": 24,
+        "precision": {
+          "value": 0.7741935483870968,
+          "lo": 0.42105263157894735,
+          "hi": 1
+        },
+        "recall": {
+          "value": 1,
+          "lo": 1,
+          "hi": 1
+        }
+      },
+      {
+        "tool": "transfer_to_human",
+        "tasks": 35,
+        "tries": 138,
+        "called": 20,
+        "expected": 24,
+        "both": 17,
+        "precision": {
+          "value": 0.85,
+          "lo": 0.5,
+          "hi": 1
+        },
+        "recall": {
+          "value": 0.7083333333333334,
+          "lo": 0.3125,
+          "hi": 1
+        }
+      }
+    ],
+    "efficiency": {
+      "tasks": 35,
+      "tries": 138,
+      "toolCalls": {
+        "value": 2.492857142857143,
+        "lo": 2.2785714285714285,
+        "hi": 2.7142857142857144
+      },
+      "reference": {
+        "value": 2.7142857142857144,
+        "lo": 2.4571428571428573,
+        "hi": 3.0285714285714285
+      },
+      "loops": 0,
+      "loopRate": {
+        "value": 0,
+        "lo": 0,
+        "hi": 0
+      }
+    }
+  },
+  "hallucination": {
+    "fabricatedEntity": {
+      "tasks": 35,
+      "tries": 138,
+      "hits": 4,
+      "rate": {
+        "value": 0.02857142857142857,
+        "lo": 0,
+        "hi": 0.08571428571428572
+      }
+    },
+    "fabricatedAction": {
+      "tasks": 35,
+      "tries": 138,
+      "hits": 1,
+      "rate": {
+        "value": 0.007142857142857143,
+        "lo": 0,
+        "hi": 0.02142857142857143
+      }
+    },
+    "claims": null
+  },
+  "judge": null
+}

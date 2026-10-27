@@ -1,0 +1,7 @@
+{
+  "name": "v3",
+  "basedOn": "v1",
+  "targets": "large-refund-itself",
+  "why": "In 20 reviewed dev failures (refund-08, transfer-03) the agent refunded over Rs 10,000 itself; refund_order now refuses any amount over the limit and tells it to transfer to a person.",
+  "change": { "validation": "refund-limit" }
+}

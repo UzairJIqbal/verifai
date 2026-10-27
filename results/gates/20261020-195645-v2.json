@@ -1,0 +1,277 @@
+{
+  "name": "v2",
+  "decidedAt": "2026-10-20T19:56:45.521Z",
+  "passed": false,
+  "promoted": false,
+  "basedOn": "v1",
+  "change": "tool descriptions v1 → v3",
+  "why": "A deliberately broken control, not a real fix for this category: tools v3 removes cancel_order, so the gate must fail it.",
+  "targets": "large-refund-itself",
+  "topCategory": "large-refund-itself",
+  "promotedLabel": "prompt v1 · tools v1",
+  "candidateLabel": "prompt v1 · tools v3",
+  "datasetVersion": "v2",
+  "triesPerTask": 4,
+  "runs": {
+    "promotedDev": "20261019-143656-19d9",
+    "candidateDev": "20261019-161307-aeb7",
+    "promotedHoldout": "20261020-194446-9c06",
+    "candidateHoldout": "20261020-195021-90d4"
+  },
+  "floor": {
+    "configKey": "95e952b995fcd27c",
+    "measuredAt": "2026-10-19T14:48:23.581Z",
+    "datasetVersion": "v2",
+    "runs": [
+      "20261019-142319-28a0",
+      "20261019-143656-19d9"
+    ],
+    "tasks": 35,
+    "overall": 0.0464327470649756
+  },
+  "dev": {
+    "overall": {
+      "tasks": 35,
+      "aRate": 0.9142857142857143,
+      "bRate": 0.7928571428571428,
+      "difference": {
+        "value": -0.12142857142857143,
+        "lo": -0.2357142857142857,
+        "hi": -0.02142857142857143
+      },
+      "p": 0.03125,
+      "floor": 0.0464327470649756,
+      "verdict": "worse"
+    },
+    "byCategory": {
+      "cancel": {
+        "tasks": 7,
+        "aRate": 0.9642857142857143,
+        "bRate": 0.42857142857142855,
+        "difference": {
+          "value": -0.5357142857142857,
+          "lo": -0.8571428571428571,
+          "hi": -0.14285714285714285
+        },
+        "p": 0.125,
+        "floor": 0.09899494936611665,
+        "verdict": "within-noise"
+      },
+      "refund": {
+        "tasks": 7,
+        "aRate": 0.7857142857142857,
+        "bRate": 0.75,
+        "difference": {
+          "value": -0.03571428571428571,
+          "lo": -0.2857142857142857,
+          "hi": 0.14285714285714285
+        },
+        "p": 1,
+        "floor": 0.12124355652982141,
+        "verdict": "within-noise"
+      },
+      "address": {
+        "tasks": 7,
+        "aRate": 1,
+        "bRate": 1,
+        "difference": {
+          "value": 0,
+          "lo": 0,
+          "hi": 0
+        },
+        "p": 1,
+        "floor": 0.06999999999999999,
+        "verdict": "within-noise"
+      },
+      "status": {
+        "tasks": 7,
+        "aRate": 1,
+        "bRate": 1,
+        "difference": {
+          "value": 0,
+          "lo": 0,
+          "hi": 0
+        },
+        "p": 1,
+        "floor": 0,
+        "verdict": "within-noise"
+      },
+      "transfer": {
+        "tasks": 7,
+        "aRate": 0.8214285714285714,
+        "bRate": 0.7857142857142857,
+        "difference": {
+          "value": -0.03571428571428571,
+          "lo": -0.10714285714285714,
+          "hi": 0
+        },
+        "p": 1,
+        "floor": 0.15652475842498528,
+        "verdict": "within-noise"
+      }
+    }
+  },
+  "holdout": {
+    "overall": {
+      "tasks": 15,
+      "aRate": 0.8166666666666667,
+      "bRate": 0.7166666666666667,
+      "difference": {
+        "value": -0.1,
+        "lo": -0.3,
+        "hi": 0.06666666666666667
+      },
+      "p": 1,
+      "floor": 0.0709271927166631,
+      "verdict": "within-noise"
+    },
+    "byCategory": {
+      "cancel": {
+        "tasks": 3,
+        "aRate": 0.6666666666666666,
+        "bRate": 0,
+        "difference": {
+          "value": -0.6666666666666666,
+          "lo": -1,
+          "hi": 0
+        },
+        "p": 0.5,
+        "floor": 0.15121728296285009,
+        "verdict": "within-noise"
+      },
+      "refund": {
+        "tasks": 3,
+        "aRate": 1,
+        "bRate": 1,
+        "difference": {
+          "value": 0,
+          "lo": 0,
+          "hi": 0
+        },
+        "p": 1,
+        "floor": 0.18520259177452136,
+        "verdict": "within-noise"
+      },
+      "address": {
+        "tasks": 3,
+        "aRate": 1,
+        "bRate": 1,
+        "difference": {
+          "value": 0,
+          "lo": 0,
+          "hi": 0
+        },
+        "p": 1,
+        "floor": 0.10692676621563627,
+        "verdict": "within-noise"
+      },
+      "status": {
+        "tasks": 3,
+        "aRate": 1,
+        "bRate": 1,
+        "difference": {
+          "value": 0,
+          "lo": 0,
+          "hi": 0
+        },
+        "p": 1,
+        "floor": 0,
+        "verdict": "within-noise"
+      },
+      "transfer": {
+        "tasks": 3,
+        "aRate": 0.4166666666666667,
+        "bRate": 0.5833333333333334,
+        "difference": {
+          "value": 0.16666666666666666,
+          "lo": 0,
+          "hi": 0.5
+        },
+        "p": 1,
+        "floor": 0.23909551787239064,
+        "verdict": "within-noise"
+      }
+    }
+  },
+  "maxCategoryDropPoints": 5,
+  "checks": [
+    {
+      "id": "dev-same-tasks",
+      "label": "dev: both versions ran the same tasks",
+      "pass": true,
+      "detail": "35 tasks"
+    },
+    {
+      "id": "holdout-same-tasks",
+      "label": "holdout: both versions ran the same tasks",
+      "pass": true,
+      "detail": "15 tasks"
+    },
+    {
+      "id": "holdout-better",
+      "label": "holdout success improves beyond the noise floor, and McNemar agrees",
+      "pass": false,
+      "detail": "-10.0 points [-30.0, +6.7] · floor 7.1 · McNemar p 1.000 · within-noise"
+    },
+    {
+      "id": "dev-cancel",
+      "label": "dev cancel: drops no more than 5 points",
+      "pass": false,
+      "detail": "-53.6 points on 7 tasks (96.4% → 42.9%)"
+    },
+    {
+      "id": "dev-refund",
+      "label": "dev refund: drops no more than 5 points",
+      "pass": true,
+      "detail": "-3.6 points on 7 tasks (78.6% → 75.0%)"
+    },
+    {
+      "id": "dev-address",
+      "label": "dev address: drops no more than 5 points",
+      "pass": true,
+      "detail": "+0.0 points on 7 tasks (100.0% → 100.0%)"
+    },
+    {
+      "id": "dev-status",
+      "label": "dev status: drops no more than 5 points",
+      "pass": true,
+      "detail": "+0.0 points on 7 tasks (100.0% → 100.0%)"
+    },
+    {
+      "id": "dev-transfer",
+      "label": "dev transfer: drops no more than 5 points",
+      "pass": true,
+      "detail": "-3.6 points on 7 tasks (82.1% → 78.6%)"
+    },
+    {
+      "id": "holdout-cancel",
+      "label": "holdout cancel: drops no more than 5 points",
+      "pass": false,
+      "detail": "-66.7 points on 3 tasks (66.7% → 0.0%)"
+    },
+    {
+      "id": "holdout-refund",
+      "label": "holdout refund: drops no more than 5 points",
+      "pass": true,
+      "detail": "+0.0 points on 3 tasks (100.0% → 100.0%)"
+    },
+    {
+      "id": "holdout-address",
+      "label": "holdout address: drops no more than 5 points",
+      "pass": true,
+      "detail": "+0.0 points on 3 tasks (100.0% → 100.0%)"
+    },
+    {
+      "id": "holdout-status",
+      "label": "holdout status: drops no more than 5 points",
+      "pass": true,
+      "detail": "+0.0 points on 3 tasks (100.0% → 100.0%)"
+    },
+    {
+      "id": "holdout-transfer",
+      "label": "holdout transfer: drops no more than 5 points",
+      "pass": true,
+      "detail": "+16.7 points on 3 tasks (41.7% → 58.3%)"
+    }
+  ]
+}

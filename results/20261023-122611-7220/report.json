@@ -1,7 +1,7 @@
 {
   "runId": "20261023-122611-7220",
   "createdAt": "2026-10-23T12:26:11.693Z",
-  "finishedAt": "2026-10-25T09:21:28.533Z",
+  "finishedAt": "2026-10-26T17:22:58.695Z",
   "split": "dev",
   "smoke": false,
   "datasetVersion": "v3",
@@ -26,54 +26,54 @@
   "promotedAs": null,
   "totals": {
     "trials": 224,
-    "passed": 200,
+    "passed": 201,
     "failed": 23,
-    "errored": 1,
-    "calls": 1106,
+    "errored": 0,
+    "calls": 1109,
     "cachedCalls": 0,
     "callsByProvider": {
-      "groq": 581,
+      "groq": 584,
       "cloudflare": 525
     },
     "usage": {
-      "inputTokens": 1346964,
-      "cachedInputTokens": 531712,
-      "outputTokens": 63345
+      "inputTokens": 1351872,
+      "cachedInputTokens": 528384,
+      "outputTokens": 63383
     },
-    "costUsd": 0.3193367500000001
+    "costUsd": 0.3203453500000001
   },
   "stats": {
     "overall": {
       "tasks": 56,
       "tries": 224,
-      "passed": 200,
+      "passed": 201,
       "passHat": [
         {
-          "value": 0.8928571428571429,
-          "lo": 0.8348214285714286,
-          "hi": 0.9419642857142857
+          "value": 0.8973214285714286,
+          "lo": 0.8392857142857143,
+          "hi": 0.9464285714285714
         },
         {
-          "value": 0.8244047619047619,
-          "lo": 0.7410714285714286,
-          "hi": 0.9017857142857143
+          "value": 0.8333333333333333,
+          "lo": 0.75,
+          "hi": 0.9077380952380952
         },
         {
-          "value": 0.7723214285714286,
-          "lo": 0.6696428571428571,
-          "hi": 0.8660714285714286
+          "value": 0.7857142857142857,
+          "lo": 0.6830357142857143,
+          "hi": 0.8794642857142857
         },
         {
-          "value": 0.7321428571428571,
-          "lo": 0.6071428571428571,
-          "hi": 0.8392857142857143
+          "value": 0.75,
+          "lo": 0.6428571428571429,
+          "hi": 0.8571428571428571
         }
       ],
       "passAt": [
         {
-          "value": 0.8928571428571429,
-          "lo": 0.8348214285714286,
-          "hi": 0.9419642857142857
+          "value": 0.8973214285714286,
+          "lo": 0.8392857142857143,
+          "hi": 0.9464285714285714
         },
         {
           "value": 0.9613095238095238,
@@ -292,34 +292,34 @@
       "transfer": {
         "tasks": 11,
         "tries": 44,
-        "passed": 33,
+        "passed": 34,
         "passHat": [
           {
-            "value": 0.75,
-            "lo": 0.5454545454545454,
+            "value": 0.7727272727272727,
+            "lo": 0.5681818181818182,
+            "hi": 0.9545454545454546
+          },
+          {
+            "value": 0.6818181818181818,
+            "lo": 0.45454545454545453,
             "hi": 0.9090909090909091
           },
           {
-            "value": 0.6363636363636364,
-            "lo": 0.4090909090909091,
+            "value": 0.6136363636363636,
+            "lo": 0.36363636363636365,
             "hi": 0.8636363636363636
           },
           {
             "value": 0.5454545454545454,
-            "lo": 0.29545454545454547,
-            "hi": 0.7954545454545454
-          },
-          {
-            "value": 0.45454545454545453,
-            "lo": 0.18181818181818182,
-            "hi": 0.7272727272727273
+            "lo": 0.2727272727272727,
+            "hi": 0.8181818181818182
           }
         ],
         "passAt": [
           {
-            "value": 0.75,
-            "lo": 0.5454545454545454,
-            "hi": 0.9090909090909091
+            "value": 0.7727272727272727,
+            "lo": 0.5681818181818182,
+            "hi": 0.9545454545454546
           },
           {
             "value": 0.8636363636363636,
@@ -392,34 +392,34 @@
       "hard": {
         "tasks": 35,
         "tries": 140,
-        "passed": 121,
+        "passed": 122,
         "passHat": [
           {
-            "value": 0.8642857142857143,
-            "lo": 0.7785714285714286,
-            "hi": 0.9357142857142857
+            "value": 0.8714285714285714,
+            "lo": 0.7857142857142857,
+            "hi": 0.9428571428571428
           },
           {
-            "value": 0.7857142857142857,
-            "lo": 0.6714285714285714,
-            "hi": 0.8904761904761905
+            "value": 0.8,
+            "lo": 0.6857142857142857,
+            "hi": 0.9047619047619048
           },
           {
-            "value": 0.7285714285714285,
-            "lo": 0.5928571428571429,
+            "value": 0.75,
+            "lo": 0.6142857142857143,
+            "hi": 0.8785714285714286
+          },
+          {
+            "value": 0.7142857142857143,
+            "lo": 0.5714285714285714,
             "hi": 0.8571428571428571
-          },
-          {
-            "value": 0.6857142857142857,
-            "lo": 0.5428571428571428,
-            "hi": 0.8285714285714286
           }
         ],
         "passAt": [
           {
-            "value": 0.8642857142857143,
-            "lo": 0.7785714285714286,
-            "hi": 0.9357142857142857
+            "value": 0.8714285714285714,
+            "lo": 0.7857142857142857,
+            "hi": 0.9428571428571428
           },
           {
             "value": 0.9428571428571428,
@@ -442,15 +442,15 @@
   },
   "graders": {
     "tasks": 56,
-    "tries": 223,
-    "errored": 1,
+    "tries": 224,
+    "errored": 0,
     "graders": [
       {
         "grader": "state",
         "tasks": 56,
-        "tries": 223,
-        "graded": 223,
-        "passed": 211,
+        "tries": 224,
+        "graded": 224,
+        "passed": 212,
         "ungraded": 0,
         "rate": {
           "value": 0.9464285714285714,
@@ -461,9 +461,9 @@
       {
         "grader": "reply",
         "tasks": 56,
-        "tries": 223,
-        "graded": 223,
-        "passed": 211,
+        "tries": 224,
+        "graded": 224,
+        "passed": 212,
         "ungraded": 0,
         "rate": {
           "value": 0.9464285714285714,
@@ -474,9 +474,9 @@
       {
         "grader": "tool-choice",
         "tasks": 56,
-        "tries": 223,
-        "graded": 223,
-        "passed": 208,
+        "tries": 224,
+        "graded": 224,
+        "passed": 209,
         "ungraded": 0,
         "rate": {
           "value": 0.9330357142857143,
@@ -487,9 +487,9 @@
       {
         "grader": "arguments",
         "tasks": 56,
-        "tries": 223,
-        "graded": 223,
-        "passed": 223,
+        "tries": 224,
+        "graded": 224,
+        "passed": 224,
         "ungraded": 0,
         "rate": {
           "value": 1,
@@ -500,9 +500,9 @@
       {
         "grader": "policy:identify-first",
         "tasks": 56,
-        "tries": 223,
-        "graded": 223,
-        "passed": 219,
+        "tries": 224,
+        "graded": 224,
+        "passed": 220,
         "ungraded": 0,
         "rate": {
           "value": 0.9821428571428571,
@@ -513,9 +513,9 @@
       {
         "grader": "policy:look-up-first",
         "tasks": 56,
-        "tries": 223,
-        "graded": 223,
-        "passed": 200,
+        "tries": 224,
+        "graded": 224,
+        "passed": 201,
         "ungraded": 0,
         "rate": {
           "value": 0.8973214285714286,
@@ -526,9 +526,9 @@
       {
         "grader": "policy:cancel-only-processing",
         "tasks": 56,
-        "tries": 223,
-        "graded": 223,
-        "passed": 223,
+        "tries": 224,
+        "graded": 224,
+        "passed": 224,
         "ungraded": 0,
         "rate": {
           "value": 1,
@@ -539,9 +539,9 @@
       {
         "grader": "policy:address-only-processing",
         "tasks": 56,
-        "tries": 223,
-        "graded": 223,
-        "passed": 223,
+        "tries": 224,
+        "graded": 224,
+        "passed": 224,
         "ungraded": 0,
         "rate": {
           "value": 1,
@@ -552,9 +552,9 @@
       {
         "grader": "policy:refund-rules",
         "tasks": 56,
-        "tries": 223,
-        "graded": 223,
-        "passed": 219,
+        "tries": 224,
+        "graded": 224,
+        "passed": 220,
         "ungraded": 0,
         "rate": {
           "value": 0.9821428571428571,
@@ -565,9 +565,9 @@
       {
         "grader": "policy:large-refund-to-human",
         "tasks": 56,
-        "tries": 223,
-        "graded": 223,
-        "passed": 216,
+        "tries": 224,
+        "graded": 224,
+        "passed": 217,
         "ungraded": 0,
         "rate": {
           "value": 0.96875,
@@ -578,9 +578,9 @@
       {
         "grader": "policy:confirm-first",
         "tasks": 56,
-        "tries": 223,
-        "graded": 223,
-        "passed": 203,
+        "tries": 224,
+        "graded": 224,
+        "passed": 204,
         "ungraded": 0,
         "rate": {
           "value": 0.9107142857142857,
@@ -591,9 +591,9 @@
       {
         "grader": "policy:no-false-promises",
         "tasks": 56,
-        "tries": 223,
-        "graded": 223,
-        "passed": 221,
+        "tries": 224,
+        "graded": 224,
+        "passed": 222,
         "ungraded": 0,
         "rate": {
           "value": 0.9910714285714286,
@@ -604,9 +604,9 @@
       {
         "grader": "efficiency",
         "tasks": 56,
-        "tries": 223,
-        "graded": 223,
-        "passed": 223,
+        "tries": 224,
+        "graded": 224,
+        "passed": 224,
         "ungraded": 0,
         "rate": {
           "value": 1,
@@ -617,9 +617,9 @@
       {
         "grader": "loop",
         "tasks": 56,
-        "tries": 223,
-        "graded": 223,
-        "passed": 222,
+        "tries": 224,
+        "graded": 224,
+        "passed": 223,
         "ungraded": 0,
         "rate": {
           "value": 0.9955357142857143,
@@ -630,9 +630,9 @@
       {
         "grader": "fabricated-entity",
         "tasks": 56,
-        "tries": 223,
-        "graded": 223,
-        "passed": 214,
+        "tries": 224,
+        "graded": 224,
+        "passed": 215,
         "ungraded": 0,
         "rate": {
           "value": 0.9598214285714286,
@@ -643,9 +643,9 @@
       {
         "grader": "fabricated-action",
         "tasks": 56,
-        "tries": 223,
-        "graded": 223,
-        "passed": 221,
+        "tries": 224,
+        "graded": 224,
+        "passed": 222,
         "ungraded": 0,
         "rate": {
           "value": 0.9910714285714286,
@@ -656,7 +656,7 @@
     ],
     "policy": {
       "tasks": 56,
-      "tries": 223,
+      "tries": 224,
       "violated": 50,
       "rate": {
         "value": 0.22321428571428573,
@@ -668,25 +668,25 @@
       {
         "tool": "find_customer_by_email",
         "tasks": 56,
-        "tries": 223,
-        "called": 209,
-        "expected": 223,
-        "both": 209,
+        "tries": 224,
+        "called": 210,
+        "expected": 224,
+        "both": 210,
         "precision": {
           "value": 1,
           "lo": 1,
           "hi": 1
         },
         "recall": {
-          "value": 0.9372197309417041,
+          "value": 0.9375,
           "lo": 0.8705357142857143,
-          "hi": 0.990990990990991
+          "hi": 0.9910714285714286
         }
       },
       {
         "tool": "list_customer_orders",
         "tasks": 56,
-        "tries": 223,
+        "tries": 224,
         "called": 39,
         "expected": 36,
         "both": 34,
@@ -704,25 +704,25 @@
       {
         "tool": "get_order",
         "tasks": 56,
-        "tries": 223,
-        "called": 176,
-        "expected": 203,
-        "both": 172,
+        "tries": 224,
+        "called": 177,
+        "expected": 204,
+        "both": 173,
         "precision": {
-          "value": 0.9772727272727273,
-          "lo": 0.9281437125748503,
+          "value": 0.9774011299435028,
+          "lo": 0.9285714285714286,
           "hi": 1
         },
         "recall": {
-          "value": 0.8472906403940886,
-          "lo": 0.7463377491642936,
-          "hi": 0.9358288770053476
+          "value": 0.8480392156862745,
+          "lo": 0.75,
+          "hi": 0.9362745098039216
         }
       },
       {
         "tool": "update_order_address",
         "tasks": 56,
-        "tries": 223,
+        "tries": 224,
         "called": 31,
         "expected": 32,
         "both": 31,
@@ -740,7 +740,7 @@
       {
         "tool": "cancel_order",
         "tasks": 56,
-        "tries": 223,
+        "tries": 224,
         "called": 24,
         "expected": 24,
         "both": 24,
@@ -758,7 +758,7 @@
       {
         "tool": "refund_order",
         "tasks": 56,
-        "tries": 223,
+        "tries": 224,
         "called": 43,
         "expected": 32,
         "both": 32,
@@ -776,25 +776,25 @@
       {
         "tool": "transfer_to_human",
         "tasks": 56,
-        "tries": 223,
-        "called": 39,
-        "expected": 43,
-        "both": 36,
+        "tries": 224,
+        "called": 40,
+        "expected": 44,
+        "both": 37,
         "precision": {
-          "value": 0.9230769230769231,
-          "lo": 0.7666666666666667,
+          "value": 0.925,
+          "lo": 0.772707336523126,
           "hi": 1
         },
         "recall": {
-          "value": 0.8372093023255814,
-          "lo": 0.6666666666666666,
-          "hi": 0.9736842105263158
+          "value": 0.8409090909090909,
+          "lo": 0.675,
+          "hi": 0.975
         }
       }
     ],
     "efficiency": {
       "tasks": 56,
-      "tries": 223,
+      "tries": 224,
       "toolCalls": {
         "value": 2.575892857142857,
         "lo": 2.3794642857142856,
@@ -816,7 +816,7 @@
   "hallucination": {
     "fabricatedEntity": {
       "tasks": 56,
-      "tries": 223,
+      "tries": 224,
       "hits": 9,
       "rate": {
         "value": 0.04017857142857143,
@@ -826,7 +826,7 @@
     },
     "fabricatedAction": {
       "tasks": 56,
-      "tries": 223,
+      "tries": 224,
       "hits": 2,
       "rate": {
         "value": 0.008928571428571428,
@@ -834,7 +834,37 @@
         "hi": 0.022321428571428572
       }
     },
-    "claims": null
+    "claims": {
+      "judges": [
+        "gemini-3.5-flash-lite · claims v1"
+      ],
+      "checkable": 224,
+      "checked": 223,
+      "ungraded": 0,
+      "responses": {
+        "tasks": 56,
+        "tries": 223,
+        "replies": 532,
+        "flagged": 40,
+        "rate": {
+          "value": 0.07518796992481203,
+          "lo": 0.03731343283582089,
+          "hi": 0.12318840579710146
+        }
+      },
+      "claims": {
+        "tasks": 56,
+        "tries": 223,
+        "total": 859,
+        "unsupported": 32,
+        "contradicted": 10,
+        "rate": {
+          "value": 0.037252619324796274,
+          "lo": 0.014999882849109653,
+          "hi": 0.06706664091172493
+        }
+      }
+    }
   },
   "judge": null
 }

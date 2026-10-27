@@ -82,14 +82,14 @@ How each try got to its result, reported beside the success rate and never part 
 
 ## Hallucination
 
-Rates are averaged over tasks with 95% intervals; the reply and claim rates pool each task's replies or claims first. The claim checker hasn't read this run. `pnpm claims <run>` sends about one judge call per try.
+Rates are averaged over tasks with 95% intervals; the reply and claim rates pool each task's replies or claims first. Claims read by gemini-3.5-flash-lite · claims v1: 224 of 224 tries checked.
 
 |  | tasks | tries | count | rate |
 | --- | --- | --- | --- | --- |
 | fabricated entity | 56 | 224 | 8/224 tries | 3.6% (0.0–8.5) |
 | fabricated action | 56 | 224 | 2/224 tries | 0.9% (0.0–2.7) |
-| replies with a bad claim | – | – | – | not checked yet: run `pnpm claims` |
-| unsupported claims | – | – | – | not checked yet: run `pnpm claims` |
+| replies with a bad claim | 56 | 224 | 52/534 replies | 9.7% (5.8–14.5) |
+| unsupported claims | 56 | 224 | 47/824 claims (13 contradicted) | 5.7% (3.0–9.2) |
 
 - **Fabricated entity:** Tries where the agent wrote an order number, customer id, email, amount or date (in a reply or a tool input) that no tool result, customer message or the policy had shown before it. Checked by code on every try.
 - **Fabricated action:** Tries where a reply says an action was done (refunded, cancelled, address changed, passed to a person) with no successful call of the tool that does it. Checked by code on every try.
@@ -98,7 +98,17 @@ Rates are averaged over tasks with 95% intervals; the reply and claim rates pool
 
 ## AI judge
 
-The AI judge hasn't read this run. `pnpm judge <run>` sends about one judge call per try with a reply.
+Pass or fail per criterion, reported beside the success rate and never part of it. Each criterion counts only the tries it was asked about. Rates are averaged over tasks with 95% intervals. Judged by gemini-3.5-flash-lite · rubric v1 · 9fa202: 81 of 224 tries with a reply, 143 not judged yet (`pnpm judge` carries on).
+
+|  | tasks | tries | passed | pass rate |
+| --- | --- | --- | --- | --- |
+| refusal explained | 6 | 23 | 23/23 tries | 100.0% (100.0–100.0) |
+| answered question | 21 | 81 | 79/81 tries | 97.6% (94.0–100.0) |
+| tone | 21 | 81 | 74/81 tries | 91.7% (85.7–97.6) |
+
+- **refusal explained:** When the agent turned something down, it said which rule and what the customer can do instead. Asked only on tries where the task expects a refusal and the agent gave one.
+- **answered question:** Every request the customer made was answered, done or turned down.
+- **tone:** Polite and plain: no blame, no over-apologising, no internal words.
 
 Model calls: 1096 (0 replayed from the cache; 752 from cloudflare, 344 from groq) · tokens in 1262122 (264448 cached) · out 66008 · cost $0.3781 at list price
 
