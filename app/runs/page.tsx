@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { EmptyState, PageHeading } from "@/components/shell/empty-state";
+import { EmptyState, PageHeading, SectionHeading } from "@/components/shell/empty-state";
+import { AboutVerifai } from "@/components/runs/about";
 import { formatWhen } from "@/components/runs/format";
 import { interval, pct } from "@/src/stats/format";
 import { listRuns, type RunListing } from "@/src/results/read";
@@ -36,11 +37,15 @@ export default function RunsPage() {
 
   return (
     <>
-      <PageHeading title="Runs">
+      <PageHeading title="Runs" />
+      <AboutVerifai />
+
+      <SectionHeading>All evaluation runs</SectionHeading>
+      <p className="mb-4 max-w-prose text-muted-foreground">
         Every finished run of <code>pnpm eval</code>, newest first. Success is the share of tries that passed and pass^4 the chance
         all 4 tries of a task pass, each with its 95% interval in brackets. Runs whose intervals overlap may not differ at all: use{" "}
         <Link href="/compare">Compare</Link> to tell. A smoke run only checks the machinery, so it has no score.
-      </PageHeading>
+      </p>
 
       {problems.length > 0 && (
         <div className="mb-4 rounded-lg border border-fail/40 px-4 py-3">

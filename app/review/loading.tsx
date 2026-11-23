@@ -1,3 +1,5 @@
+import { LoadingText } from "@/components/shell/loading-text";
+
 export default function Loading() {
-  return <p className="text-muted-foreground">Finding the next failure to review…</p>;
+  return <LoadingText what="nextFailure" />;
 }

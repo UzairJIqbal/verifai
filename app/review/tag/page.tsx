@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { LoadingText } from "@/components/shell/loading-text";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
@@ -18,7 +19,7 @@ export default function TagPage() {
   // Deployed, the page doesn't exist: it writes into the repository.
   if (!isLocalOnlyEnabled()) notFound();
   return (
-    <Suspense fallback={<p className="text-muted-foreground">Reading your notes…</p>}>
+    <Suspense fallback={<LoadingText what="notes" />}>
       <LiveTagging />
     </Suspense>
   );

@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { LoadingText } from "@/components/shell/loading-text";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
@@ -24,7 +25,7 @@ type Params = { batchId: string };
 
 export default function BatchPage({ params }: { params: Promise<Params> }) {
   return (
-    <Suspense fallback={<p className="text-muted-foreground">Loading the batch…</p>}>
+    <Suspense fallback={<LoadingText what="batch" />}>
       {params.then((p) => (
         <BatchView {...p} />
       ))}

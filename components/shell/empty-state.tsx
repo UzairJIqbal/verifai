@@ -18,3 +18,8 @@ export function PageHeading({ title, children }: { title: string; children?: Rea
     </div>
   );
 }
+
+// The heading a page's main section starts with, under the page title.
+export function SectionHeading({ children }: { children: ReactNode }) {
+  return <h2 className="mb-1 text-[13px] font-semibold">{children}</h2>;
+}

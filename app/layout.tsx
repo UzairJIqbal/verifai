@@ -6,6 +6,7 @@ import { NavLinks, NavList } from "@/components/shell/nav-links";
 import { ThemeControl } from "@/components/shell/theme-control";
 import { THEME_SCRIPT } from "@/components/shell/theme";
 import { isLocalOnlyEnabled } from "@/src/local";
+import { REPO_URL, SITE_DESCRIPTION, SITE_URL } from "@/src/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -28,6 +29,17 @@ export const metadata: Metadata = {
   openGraph: { title: "VerifAI", description: DESCRIPTION, siteName: "VerifAI", type: "website" },
 };
 
+// Tells search tools what the site is without them running any JavaScript.
+const JSON_LD = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "VerifAI",
+  url: SITE_URL,
+  description: SITE_DESCRIPTION,
+  applicationCategory: "DeveloperApplication",
+  sameAs: [REPO_URL],
+};
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     // The theme script changes the class and data-theme before hydration.
@@ -36,6 +48,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         {/* Some browser extensions rewrite the first script in <head>; React
             should leave this one alone rather than warn. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} suppressHydrationWarning />
+        {/* "<" is escaped so no string in it can close the script tag. */}
+        <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD).replace(/</g, "\\u003c") }} />
       </head>
       <body className="flex min-h-dvh flex-col">
         <header className="border-b">

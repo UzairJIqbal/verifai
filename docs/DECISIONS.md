@@ -154,3 +154,26 @@ record, and they're already saved. A test covers it.
 **Rejected.** 2: with no connection it would hang the command for nothing.
 
 **Status.** Accepted (2026-10-26).
+
+## D-006 · 2026-11-24 · claude-opus-5-5
+
+**Context.** Search tools that don't run JavaScript read the deployed Runs
+page as "Loading the runs…" with no section headings, because the loading
+fallback sits in the server HTML ahead of the streamed table.
+
+**Options considered.**
+1. Render every loading fallback only in the browser (a client component that
+   renders nothing on the server), add a short "What VerifAI is" and "Latest
+   result" intro to Runs, an H2 on each read-only page, robots, sitemap,
+   llms.txt and JSON-LD.
+2. Delete the loading files.
+
+**Chosen.** 1. Visitors with JavaScript still see that something is coming;
+the server HTML starts with what VerifAI is. The intro's numbers are the
+README's, from the committed results.
+
+**Rejected.** 2: a slow page would show nothing at all with no hint why.
+
+**Status.** Accepted (2026-11-24). Deployed and committed on its own;
+Phase 14 must carry it into the layout, the five pages and the loading files
+before it is deployed.

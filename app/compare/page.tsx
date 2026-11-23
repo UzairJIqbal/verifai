@@ -1,6 +1,7 @@
 import { Suspense } from "react";
+import { LoadingText } from "@/components/shell/loading-text";
 import Link from "next/link";
-import { EmptyState, PageHeading } from "@/components/shell/empty-state";
+import { EmptyState, PageHeading, SectionHeading } from "@/components/shell/empty-state";
 import { LoadError } from "@/components/runs/load-error";
 import { formatWhen } from "@/components/runs/format";
 import { trialsHref } from "@/components/runs/run-stats";
@@ -24,7 +25,8 @@ export default function ComparePage({ searchParams }: { searchParams: Promise<Se
         Two finished runs side by side on the tasks they share: the change in success rate from A to B, its 95% interval, McNemar&apos;s
         p-value and a verdict against the noise floor. Better or worse needs all three to agree; anything else is within noise.
       </PageHeading>
-      <Suspense fallback={<p className="text-muted-foreground">Loading the runs…</p>}>
+      <SectionHeading>Two runs side by side</SectionHeading>
+      <Suspense fallback={<LoadingText what="runs" />}>
         {searchParams.then((sp) => (
           <Compare a={one(sp.a)} b={one(sp.b)} category={one(sp.category)} />
         ))}

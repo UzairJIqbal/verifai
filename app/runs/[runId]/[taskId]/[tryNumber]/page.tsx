@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { LoadingText } from "@/components/shell/loading-text";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeading } from "@/components/shell/empty-state";
@@ -23,7 +24,7 @@ export async function generateMetadata({ params }: { params: Promise<Params> }):
 
 export default function TrajectoryPage({ params }: { params: Promise<Params> }) {
   return (
-    <Suspense fallback={<p className="text-muted-foreground">Loading the trajectory…</p>}>
+    <Suspense fallback={<LoadingText what="trajectory" />}>
       {params.then((p) => (
         <Trajectory {...p} />
       ))}

@@ -1,4 +1,4 @@
-import { EmptyState, PageHeading } from "@/components/shell/empty-state";
+import { EmptyState, PageHeading, SectionHeading } from "@/components/shell/empty-state";
 import { TaskTable, type TaskRow } from "@/components/tasks/task-table";
 import { describeExpected } from "@/src/graders/state";
 import { describeFact } from "@/src/graders/reply";
@@ -66,6 +66,7 @@ export default function TasksPage() {
         ))}
       </div>
 
+      <SectionHeading>Dev tasks the agent is tested on</SectionHeading>
       {rows.length === 0 ? (
         <EmptyState title="No dev tasks.">
           Add tasks to <code>evals/tasks.jsonl</code> with <code>&quot;split&quot;: &quot;dev&quot;</code>, then reload.

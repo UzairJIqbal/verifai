@@ -1,3 +1,5 @@
+import { LoadingText } from "@/components/shell/loading-text";
+
 export default function Loading() {
-  return <p className="text-muted-foreground">Reading the gate records…</p>;
+  return <LoadingText what="gates" />;
 }

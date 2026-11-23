@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { EmptyState, PageHeading } from "@/components/shell/empty-state";
+import { EmptyState, PageHeading, SectionHeading } from "@/components/shell/empty-state";
 import { isLocalOnlyEnabled } from "@/src/local";
 import { draftedLine, shareText, taxonomyDoc, trialPath } from "@/src/review/doc";
 import { readNotes, readTags, readTaxonomy, readTaxonomyDoc, REVIEW_FILES, shown, TAXONOMY_DOC } from "@/src/review/files";
@@ -28,10 +28,13 @@ export const metadata: Metadata = { title: "Failures" };
 export default function FailuresPage() {
   const loaded = load();
   const heading = (
-    <PageHeading title="Failures">
-      Why failed dev tries failed, in categories named after reading them. Each note was written in free text first, then given exactly one category. Share is of every tagged failure,
-      with its 95% interval in brackets, resampled by task.
-    </PageHeading>
+    <>
+      <PageHeading title="Failures">
+        Why failed dev tries failed, in categories named after reading them. Each note was written in free text first, then given exactly one category. Share is of every tagged failure,
+        with its 95% interval in brackets, resampled by task.
+      </PageHeading>
+      <SectionHeading>Why failed tries failed, by category</SectionHeading>
+    </>
   );
   if (!loaded.ok) {
     return (

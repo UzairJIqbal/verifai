@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { LoadingText } from "@/components/shell/loading-text";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PageHeading } from "@/components/shell/empty-state";
@@ -26,7 +27,7 @@ export async function generateMetadata({ params }: { params: Promise<{ runId: st
 // The run id is only known per request, so it's read inside Suspense.
 export default function RunPage({ params }: { params: Promise<{ runId: string }> }) {
   return (
-    <Suspense fallback={<p className="text-muted-foreground">Loading the run…</p>}>
+    <Suspense fallback={<LoadingText what="run" />}>
       {params.then(({ runId }) => (
         <Run runId={runId} />
       ))}

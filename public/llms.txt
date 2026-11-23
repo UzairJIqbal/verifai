@@ -1,0 +1,25 @@
+# VerifAI
+
+> An evaluation system for a customer-support agent of a made-up phone-accessories shop, with a claim checker and a release gate.
+
+The agent answers customers using tools over a SQLite database and a written policy. VerifAI runs it on a fixed set of tasks many times, records every step, checks the results with code wherever it can, counts made-up claims, and keeps a change only if the locked-away holdout tasks get better by more than luck could explain.
+
+## Headline results
+
+- 81 tasks: 56 dev, 25 kept back as holdout.
+- The promoted agent, v1, succeeds on 89.7% of dev tries (95% interval 83.9–94.6; 56 tasks × 4 tries) and 81.0% of holdout tries (95% interval 66.0–94.0; 25 tasks × 4 tries).
+- Noise floor on dev: 4.9 points. A difference smaller than that can be luck alone (27 of 224 paired tries flipped when the same configuration ran twice).
+- Claim checker agreement with labels: Cohen's kappa 0.83 (95% interval 0.00–1.00, n = 159 labels). Of the 136 labelled tries, 129 were first drafted by a model and then checked and corrected by hand; only 7 are labelled entirely by hand. The interval is wide, so this is weak evidence, not a settled result.
+- Rubric judge: kappa 0.21 (n = 144), below the 0.6 bar, so its verdicts are reported but not trusted yet.
+
+## Pages
+
+- [Runs](https://verifai-phi-one.vercel.app/runs): every finished evaluation run, with success rate and pass^4 and their 95% intervals.
+- [Tasks](https://verifai-phi-one.vercel.app/tasks): the dev tasks the agent is tested on; the holdout is shown only as counts.
+- [Compare](https://verifai-phi-one.vercel.app/compare): two runs side by side, with the change, its interval, McNemar's p-value and a verdict against the noise floor.
+- [Failures](https://verifai-phi-one.vercel.app/failures): why failed dev tries failed, by category.
+- [Gates](https://verifai-phi-one.vercel.app/gates): each release gate decision on dev and holdout.
+
+## Code
+
+- [GitHub repository](https://github.com/UzairJIqbal/verifai)

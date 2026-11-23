@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { EmptyState, PageHeading } from "@/components/shell/empty-state";
+import { EmptyState, PageHeading, SectionHeading } from "@/components/shell/empty-state";
 import { listGates } from "@/src/gate/record";
 import { gateAnchor, type GateRecord, type GateRow } from "@/src/gate/schema";
 import { CATEGORIES } from "@/src/tasks/schema";
@@ -115,10 +115,13 @@ export const metadata: Metadata = { title: "Gates" };
 
 export default function GatesPage() {
   const heading = (
-    <PageHeading title="Gates">
-      Each candidate against the promoted version on dev and holdout. A candidate passes only if holdout success beats the noise floor with McNemar agreeing, and no category
-      drops more than its limit on either split: the larger of the set minimum and the promoted version&apos;s noise floor for that category. McNemar p is the chance of a split of task outcomes this uneven if nothing had really changed.
-    </PageHeading>
+    <>
+      <PageHeading title="Gates">
+        Each candidate against the promoted version on dev and holdout. A candidate passes only if holdout success beats the noise floor with McNemar agreeing, and no category
+        drops more than its limit on either split: the larger of the set minimum and the promoted version&apos;s noise floor for that category. McNemar p is the chance of a split of task outcomes this uneven if nothing had really changed.
+      </PageHeading>
+      <SectionHeading>Release gate decisions, newest first</SectionHeading>
+    </>
   );
   let listing;
   try {
